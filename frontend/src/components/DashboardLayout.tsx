@@ -7,7 +7,6 @@ import {
   Cpu,
   Activity,
   ShieldCheck,
-  FileText,
   Sun,
   Moon,
   Zap,
@@ -102,25 +101,25 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
   ];
 
   return (
-    <div className="flex h-screen bg-background text-foreground overflow-hidden font-sans bg-dot-pattern">
+    <div className="flex h-screen bg-background text-foreground overflow-hidden font-sans bg-dot-pattern transition-all duration-200">
       {/* Vercel-style Dense Sidebar */}
-      <aside className="w-[280px] bg-card border-r border-border flex flex-col justify-between z-20 shadow-xl">
+      <aside className="w-[260px] bg-card border-r border-border flex flex-col justify-between z-20 shadow-sm transition-all duration-200">
         <div className="flex flex-col h-full">
           {/* Logo / Header */}
-          <div className="p-5 border-b border-border flex items-center gap-3">
-            <div className="p-1.5 rounded-md bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-              <Zap className="h-5 w-5" />
+          <div className="p-4 border-b border-border flex items-center gap-2.5">
+            <div className="p-1.5 rounded-md bg-foreground text-background shadow-sm">
+              <Zap className="h-4 w-4" />
             </div>
             <div>
-              <h1 className="font-bold text-sm tracking-tight text-foreground leading-tight">CloudOps <span className="text-primary font-bold">OS</span></h1>
-              <p className="text-[10px] text-muted-foreground font-mono font-medium tracking-wide">AUTOPILOT COGNITIVE</p>
+              <h1 className="font-semibold text-xs tracking-tight text-foreground leading-tight">CloudOps <span className="font-bold text-primary">OS</span></h1>
+              <p className="text-[9px] text-muted-foreground font-mono font-medium tracking-wide">AUTOPILOT COGNITIVE</p>
             </div>
           </div>
 
           {/* Navigation Links */}
-          <nav className="p-3 space-y-0.5 overflow-y-auto flex-1 custom-scrollbar">
-            <div className="px-3 pb-2 pt-4">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Platform</span>
+          <nav className="p-2 space-y-0.5 overflow-y-auto flex-1 custom-scrollbar">
+            <div className="px-3 pb-1 pt-3">
+              <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-widest">Platform</span>
             </div>
             {navItems.slice(0, 4).map((item) => {
               const Icon = item.icon;
@@ -129,20 +128,20 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
                 <button
                   key={item.id}
                   onClick={() => setCurrentTab(item.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 ${
+                  className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
                     isActive 
-                      ? "bg-primary/10 text-primary" 
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      ? "bg-secondary text-foreground font-semibold" 
+                      : "text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
                   }`}
                 >
-                  <Icon className={`h-4 w-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                  <Icon className={`h-3.5 w-3.5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
                   <span>{item.label}</span>
                 </button>
               );
             })}
 
-            <div className="px-3 pb-2 pt-6">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Autonomous Engine</span>
+            <div className="px-3 pb-1 pt-5">
+              <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-widest">Autonomous Engine</span>
             </div>
             {navItems.slice(4).map((item) => {
               const Icon = item.icon;
@@ -151,18 +150,18 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
                 <button
                   key={item.id}
                   onClick={() => setCurrentTab(item.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 ${
+                  className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
                     isActive 
-                      ? "bg-primary/10 text-primary" 
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      ? "bg-secondary text-foreground font-semibold" 
+                      : "text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
                   }`}
                 >
-                  <Icon className={`h-4 w-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                  <Icon className={`h-3.5 w-3.5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
                   <span>{item.label}</span>
                   {isActive && item.id === 'workflow' && (
-                    <span className="ml-auto flex h-2 w-2 relative">
+                    <span className="ml-auto flex h-1.5 w-1.5 relative">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
                     </span>
                   )}
                 </button>
@@ -171,16 +170,16 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
           </nav>
 
           {/* Footer Settings */}
-          <div className="p-4 border-t border-border space-y-3 bg-muted/20">
+          <div className="p-3 border-t border-border space-y-2 bg-muted/10">
             {/* Health Status */}
-            <div className="flex items-center justify-between px-3 py-2 rounded-md bg-card border border-border text-[11px]">
+            <div className="flex items-center justify-between px-2.5 py-1.5 rounded-md bg-card border border-border text-[10px]">
               <span className="text-muted-foreground font-medium flex items-center gap-2">
                 {dbStatus === "healthy" ? <Activity className="h-3 w-3 text-emerald-500" /> : <ServerCrash className="h-3 w-3 text-destructive" />}
                 Kernel Uplink
               </span>
-              <div className="flex items-center gap-1.5">
-                <span className={`h-1.5 w-1.5 rounded-full ${
-                  dbStatus === "healthy" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" : "bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.8)]"
+              <div className="flex items-center gap-1">
+                <span className={`h-1 w-1 rounded-full ${
+                  dbStatus === "healthy" ? "bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.8)]" : "bg-destructive shadow-[0_0_4px_rgba(239,68,68,0.8)]"
                 }`} />
                 <span className="font-semibold uppercase tracking-wider text-foreground">{dbStatus}</span>
               </div>
@@ -189,10 +188,10 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
             {/* Theme Toggler */}
             <button
               onClick={() => setDarkMode(!darkMode)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-md border border-border hover:bg-muted text-xs font-medium text-muted-foreground transition-colors"
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md border border-border hover:bg-secondary/50 text-[10px] font-medium text-muted-foreground transition-colors"
             >
               <div className="flex items-center gap-2">
-                {darkMode ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
+                {darkMode ? <Moon className="h-3 w-3" /> : <Sun className="h-3 w-3" />}
                 <span>{darkMode ? "Dark Appearance" : "Light Appearance"}</span>
               </div>
             </button>
@@ -201,30 +200,30 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-background relative">
+      <main className="flex-1 flex flex-col overflow-hidden bg-background relative transition-all duration-200">
         {/* Top Navbar */}
-        <header className="h-14 border-b border-border bg-background/80 backdrop-blur-md px-6 flex items-center justify-between z-10 sticky top-0">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
+        <header className="h-12 border-b border-border bg-background/80 backdrop-blur-md px-6 flex items-center justify-between z-10 sticky top-0 transition-all duration-200">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
             <span className="text-foreground">{navItems.find((n) => n.id === currentTab)?.label}</span>
-            <span className="px-1.5 py-0.5 rounded-md bg-muted text-[10px] font-mono tracking-wide">v3.0.0-rc</span>
+            <span className="px-1.5 py-0.5 rounded-md bg-secondary text-[9px] font-mono tracking-wide">v3.0.0-rc</span>
           </div>
 
           {/* Collapsible Copilot toggle + Status */}
           <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+            <div className="hidden md:flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               <Lock className="h-3 w-3" />
               <span>Guardrails Enforced</span>
             </div>
             
             <button
               onClick={() => setIsCopilotOpen(!isCopilotOpen)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-semibold transition-all duration-200 ${
+              className={`flex items-center gap-2 px-2.5 py-1 rounded-md border text-[10px] font-semibold transition-all duration-200 ${
                 isCopilotOpen 
-                  ? "bg-primary text-primary-foreground border-primary shadow-sm" 
-                  : "bg-card text-foreground border-border hover:bg-muted"
+                  ? "bg-foreground text-background border-foreground shadow-sm" 
+                  : "bg-card text-foreground border-border hover:bg-secondary/50"
               }`}
             >
-              <MessageSquare className="h-3.5 w-3.5" />
+              <MessageSquare className="h-3 w-3" />
               <span>Copilot</span>
             </button>
           </div>
@@ -241,97 +240,97 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
 
           {/* Sliding Copilot Sidebar - Vercel v0 / Cursor style */}
           {isCopilotOpen && (
-            <aside className="w-[340px] bg-card border-l border-border flex flex-col justify-between z-10 shadow-2xl slide-in-right">
+            <aside className="w-[300px] bg-card border-l border-border flex flex-col justify-between z-10 shadow-sm slide-in-right transition-all duration-200">
               
               {/* Header */}
               <div className="p-4 border-b border-border">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="p-1 rounded bg-primary/10 text-primary">
+                    <div className="p-1 rounded bg-secondary text-foreground">
                       <Sparkle className="h-3.5 w-3.5" />
                     </div>
                     <h3 className="text-xs font-semibold text-foreground">CloudOps Copilot</h3>
                   </div>
-                  <span className="flex h-2 w-2 relative">
+                  <span className="flex h-1.5 w-1.5 relative">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                   </span>
                 </div>
 
                 {/* Pulsing Active Agent Monitor */}
-                <div className="mt-4 p-3 bg-muted/30 border border-border rounded-md">
-                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Agent Swarm Status</div>
-                  <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-[11px] font-medium">
+                <div className="mt-3 p-2.5 bg-secondary/30 border border-border rounded-md">
+                  <div className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Agent Swarm Status</div>
+                  <div className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-[10px] font-medium">
                     <div className="flex items-center justify-between">
                       <span className="text-foreground">Executive</span>
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)] animate-pulse" />
+                      <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-foreground">FinOps</span>
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_5px_rgba(99,102,241,0.5)] animate-pulse" />
+                      <span className="h-1 w-1 rounded-full bg-primary animate-pulse" />
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Policy</span>
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
+                      <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Telemetry</span>
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
+                      <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Chat Messages Timeline */}
-              <div className="flex-1 p-4 overflow-y-auto space-y-4 custom-scrollbar bg-muted/10">
+              <div className="flex-1 p-4 overflow-y-auto space-y-3 custom-scrollbar bg-muted/5">
                 {chatMessages.map((msg, idx) => (
-                  <div key={idx} className={`flex gap-3 ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                    <div className={`flex-shrink-0 h-6 w-6 rounded-full flex items-center justify-center ${msg.sender === 'user' ? 'bg-secondary text-secondary-foreground border border-border' : 'bg-primary text-primary-foreground'}`}>
-                      {msg.sender === 'user' ? <UserIcon /> : <Sparkle className="h-3 w-3" />}
+                  <div key={idx} className={`flex gap-2.5 ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                    <div className={`flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center text-[10px] ${msg.sender === 'user' ? 'bg-secondary text-foreground border border-border' : 'bg-foreground text-background'}`}>
+                      {msg.sender === 'user' ? <UserIcon /> : <Sparkle className="h-2.5 w-2.5" />}
                     </div>
                     <div className={`flex flex-col max-w-[80%] ${msg.sender === "user" ? "items-end" : "items-start"}`}>
-                      <div className={`px-3 py-2 rounded-lg text-sm leading-relaxed ${
+                      <div className={`px-2.5 py-1.5 rounded-lg text-xs leading-normal ${
                         msg.sender === "user" 
                           ? "bg-foreground text-background" 
                           : "bg-card border border-border text-foreground shadow-sm"
                       }`}>
                         {msg.text.split('`').map((chunk, i) => 
-                          i % 2 === 1 ? <code key={i} className="font-mono text-[11px] px-1 py-0.5 rounded bg-muted text-primary">{chunk}</code> : chunk
+                          i % 2 === 1 ? <code key={i} className="font-mono text-[10px] px-1 py-0.5 rounded bg-secondary text-primary">{chunk}</code> : chunk
                         )}
                       </div>
                     </div>
                   </div>
                 ))}
                 {isTyping && (
-                  <div className="flex gap-3 flex-row">
-                    <div className="flex-shrink-0 h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                      <Sparkle className="h-3 w-3" />
+                  <div className="flex gap-2.5 flex-row">
+                    <div className="flex-shrink-0 h-5 w-5 rounded-full bg-foreground text-background flex items-center justify-center">
+                      <Sparkle className="h-2.5 w-2.5" />
                     </div>
-                    <div className="px-3 py-2 rounded-lg bg-card border border-border flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-bounce"></span>
-                      <span className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
-                      <span className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
+                    <div className="px-2.5 py-1.5 rounded-lg bg-card border border-border flex items-center gap-1">
+                      <span className="h-1 w-1 bg-muted-foreground rounded-full animate-bounce"></span>
+                      <span className="h-1 w-1 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+                      <span className="h-1 w-1 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Chat Input Field */}
-              <form onSubmit={handleSendChat} className="p-4 bg-card border-t border-border relative">
+              <form onSubmit={handleSendChat} className="p-3 bg-card border-t border-border relative">
                 <input
                   type="text"
                   placeholder="Ask the swarm about savings..."
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   disabled={isTyping}
-                  className="w-full bg-background border border-border rounded-md pl-3 pr-10 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
+                  className="w-full bg-background border border-border rounded-md pl-3 pr-8 py-2 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
                 />
                 <button 
                   type="submit"
                   disabled={isTyping || !chatInput.trim()}
-                  className="absolute right-6 top-6 text-muted-foreground hover:text-primary disabled:opacity-50 transition-colors"
+                  className="absolute right-5 top-5 text-muted-foreground hover:text-primary disabled:opacity-50 transition-colors"
                 >
-                  <Send className="h-4 w-4" />
+                  <Send className="h-3.5 w-3.5" />
                 </button>
               </form>
             </aside>
@@ -344,7 +343,7 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
 
 function UserIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
       <circle cx="12" cy="7" r="4"></circle>
     </svg>
