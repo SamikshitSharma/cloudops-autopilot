@@ -49,7 +49,7 @@ function App() {
       case "inventory":
         return <Inventory resources={resources} />;
       case "topology":
-        return <Topology resources={resources} />;
+        return <Topology resources={resources} recommendations={recommendations} activeRunDetails={runDetails} />;
       case "recommendations":
         return <Recommendations recommendations={recommendations} />;
       case "workflow":

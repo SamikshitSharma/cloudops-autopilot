@@ -43,6 +43,10 @@ vi.mock("lucide-react", () => ({
   Send: () => <span>Send</span>,
   Sparkle: () => <span>Sparkle</span>,
   MessageSquare: () => <span>MessageSquare</span>,
+  ServerCrash: () => <span>ServerCrash</span>,
+  ShieldAlert: () => <span>ShieldAlert</span>,
+  CheckCircle2: () => <span>CheckCircle2</span>,
+  AlertCircle: () => <span>AlertCircle</span>,
 }));
 
 vi.mock("recharts", () => ({
@@ -74,9 +78,9 @@ describe("Dashboard UI Shell", () => {
     );
 
     // Verify system title & capstone credit
-    expect(screen.getByText("Google x Kaggle AI Agents Capstone")).toBeDefined();
+    expect(screen.getByText("CloudOps")).toBeDefined();
     expect(screen.getByText("Test Child")).toBeDefined();
-    expect(screen.getByText("Engine Connectivity")).toBeDefined();
+    expect(screen.getByText("Kernel Uplink")).toBeDefined();
   });
 });
 
