@@ -24,6 +24,22 @@ vi.mock("lucide-react", () => ({
   MapPin: () => <span>MapPin</span>,
   Tag: () => <span>Tag</span>,
   Layers: () => <span>Layers</span>,
+  Network: () => <span>Network</span>,
+  Filter: () => <span>Filter</span>,
+  Sparkles: () => <span>Sparkles</span>,
+  Cpu: () => <span>Cpu</span>,
+  Shield: () => <span>Shield</span>,
+  Award: () => <span>Award</span>,
+  ChevronRight: () => <span>ChevronRight</span>,
+  X: () => <span>X</span>,
+  User: () => <span>User</span>,
+  Lock: () => <span>Lock</span>,
+  Globe: () => <span>Globe</span>,
+  Server: () => <span>Server</span>,
+  ArrowDown: () => <span>ArrowDown</span>,
+  Settings: () => <span>Settings</span>,
+  Search: () => <span>Search</span>,
+  Zap: () => <span>Zap</span>,
 }));
 
 vi.mock("recharts", () => ({
@@ -37,6 +53,8 @@ vi.mock("recharts", () => ({
   Pie: ({ children }: any) => <div>{children}</div>,
   Cell: () => <div />,
   Legend: () => <div />,
+  AreaChart: ({ children }: any) => <div data-testid="area-chart">{children}</div>,
+  Area: () => <div />,
 }));
 
 import { DashboardLayout } from "./components/DashboardLayout";
@@ -97,7 +115,7 @@ describe("Overview Panel Metrics", () => {
     // Discovered savings = 50 + 30 = 80
     expect(screen.getByText("$80.00")).toBeDefined();
     // Realized savings = 50 (executed)
-    expect(screen.getByText("$50.00")).toBeDefined();
+    expect(screen.getAllByText("$50.00")[0]).toBeDefined();
   });
 });
 
@@ -120,7 +138,7 @@ describe("Inventory List & Topology", () => {
 
     // Verify grid list headers and items exist
     expect(screen.getAllByText("vm-idle-01").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Microsoft.Compute/virtualMachines")).toBeDefined();
-    expect(screen.getByText("eastus")).toBeDefined();
+    expect(screen.getAllByText("Microsoft.Compute/virtualMachines")[0]).toBeDefined();
+    expect(screen.getAllByText("eastus")[0]).toBeDefined();
   });
 });

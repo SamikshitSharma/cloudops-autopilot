@@ -3,8 +3,10 @@ import { DashboardLayout } from "./components/DashboardLayout";
 import { Overview } from "./views/Overview";
 import { WorkflowExecution } from "./views/WorkflowExecution";
 import { Inventory } from "./views/Inventory";
+import { Topology } from "./views/Topology";
 import { Recommendations } from "./views/Recommendations";
-import { Explainability } from "./views/Explainability";
+import { EventBus } from "./views/EventBus";
+import { Approvals } from "./views/Approvals";
 import { AuditLogs } from "./views/AuditLogs";
 import { useWorkflow } from "./hooks/useWorkflow";
 
@@ -12,6 +14,7 @@ function App() {
   const [currentTab, setCurrentTab] = useState("overview");
   const {
     runs,
+    runsDetails,
     resources,
     recommendations,
     approvals,
@@ -25,10 +28,10 @@ function App() {
     refresh
   } = useWorkflow();
 
-  // If a run starts, switch to execution tab so the user sees it running in real-time!
+  // If a run starts, switch to workflow tab so the user sees it running in real-time!
   useEffect(() => {
     if (activeRunId) {
-      setCurrentTab("execution");
+      setCurrentTab("workflow");
     }
   }, [activeRunId]);
 
@@ -41,10 +44,15 @@ function App() {
             resources={resources}
             recommendations={recommendations}
             approvals={approvals}
-            activeRunDetails={runDetails}
           />
         );
-      case "execution":
+      case "inventory":
+        return <Inventory resources={resources} />;
+      case "topology":
+        return <Topology resources={resources} />;
+      case "recommendations":
+        return <Recommendations recommendations={recommendations} />;
+      case "workflow":
         return (
           <WorkflowExecution
             runs={runs}
@@ -56,20 +64,18 @@ function App() {
             selectRun={selectRun}
           />
         );
-      case "inventory":
-        return <Inventory resources={resources} />;
-      case "recommendations":
+      case "eventbus":
+        return <EventBus runs={runsDetails} activeRunDetails={runDetails} />;
+      case "approvals":
         return (
-          <Recommendations
+          <Approvals
             recommendations={recommendations}
             approvals={approvals}
             approve={approve}
           />
         );
-      case "explainability":
-        return <Explainability recommendations={recommendations} />;
-      case "logs":
-        return <AuditLogs runs={runs} refresh={refresh} />;
+      case "audit":
+        return <AuditLogs runs={runsDetails} refresh={refresh} />;
       default:
         return (
           <Overview 
@@ -77,7 +83,6 @@ function App() {
             resources={resources}
             recommendations={recommendations}
             approvals={approvals}
-            activeRunDetails={runDetails}
           />
         );
     }

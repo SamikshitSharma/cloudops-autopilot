@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { 
   Database, 
-  MapPin, 
+  Search, 
+  Filter, 
+  Globe, 
   Tag, 
-  Info, 
   Cpu, 
-  Layers 
+  Server
 } from "lucide-react";
 import type { ResourceDTO } from "../api/client";
 
@@ -14,245 +15,164 @@ interface InventoryProps {
 }
 
 export function Inventory({ resources }: InventoryProps) {
-  const [selectedResource, setSelectedResource] = useState<ResourceDTO | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedType, setSelectedType] = useState("all");
+  const [selectedRegion, setSelectedRegion] = useState("all");
 
-  // Group resources by Resource Group parsed from provider_id
-  const parseResourceGroup = (providerId: string): string => {
-    const match = providerId.match(/\/resourceGroups\/([^/]+)/i);
-    return match ? match[1] : "default-rg";
-  };
+  // Get unique resource types for filter dropdown
+  const uniqueTypes = ["all", ...new Set(resources.map(r => r.type))];
 
-  const groupedByRg = resources.reduce((acc, r) => {
-    const rg = parseResourceGroup(r.provider_id);
-    if (!acc[rg]) {
-      acc[rg] = [];
-    }
-    acc[rg].push(r);
-    return acc;
-  }, {} as Record<string, ResourceDTO[]>);
+  // Get unique regions for filter dropdown
+  const uniqueRegions = ["all", ...new Set(resources.map(r => r.region))];
+
+  // Filter resources
+  const filteredResources = resources.filter(res => {
+    const matchesSearch = searchQuery === "" || 
+      res.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      res.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      Object.entries(res.tags).some(([k, v]) => 
+        k.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        v.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+
+    const matchesType = selectedType === "all" || res.type === selectedType;
+    const matchesRegion = selectedRegion === "all" || res.region === selectedRegion;
+
+    return matchesSearch && matchesType && matchesRegion;
+  });
 
   return (
-    <div className="space-y-8">
-      
-      {/* 1. Interactive SVG Azure Topology Visualizer */}
-      <div className="p-6 bg-card border border-border rounded-xl">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <Layers className="h-5 w-5 text-primary" />
-            <h3 className="font-heading font-semibold text-base">Azure Cloud Subscription Topology Map</h3>
-          </div>
-          <span className="text-xs text-muted font-mono">HOVER NODES TO INSPECT CONFIG</span>
+    <div className="space-y-8 animate-fadeIn">
+      {/* Header Widget */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#22252d] pb-6">
+        <div>
+          <h2 className="text-xl font-extrabold text-white tracking-wide">LIVE AZURE RESOURCE INVENTORY</h2>
+          <p className="text-xs text-slate-400 mt-1">Discovered cloud resources across all configured resource groups and namespaces.</p>
         </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          
-          {/* Topology Canvas */}
-          <div className="lg:col-span-3 border border-border/60 rounded-xl bg-slate-950/40 p-4 overflow-auto flex justify-center items-center min-h-[400px]">
-            <svg width="680" height="360" viewBox="0 0 680 360" className="w-full max-w-[680px]">
-              
-              {/* Subscription Outer Border */}
-              <rect x="10" y="10" width="660" height="340" rx="12" fill="none" stroke="var(--border)" strokeWidth="1.5" strokeDasharray="4 4" />
-              <text x="30" y="32" className="text-[10px] font-bold fill-slate-400 font-mono">SUBSCRIPTION / CLOUDOPS-DEMO-SUB</text>
-
-              {/* Resource Group 1: rg-prod (Primary workload) */}
-              <g id="rg-prod">
-                <rect x="30" y="60" width="320" height="260" rx="8" fill="var(--card)" fillOpacity="0.03" stroke="var(--border)" strokeWidth="1" />
-                <text x="45" y="80" className="text-xs font-bold fill-foreground/70 font-sans">rg-prod (Production)</text>
-                
-                {/* vm-idle-01 */}
-                <g className="cursor-pointer" onClick={() => setSelectedResource(resources.find(r => r.id === "vm-idle-01") || null)}
-                   onMouseEnter={() => setSelectedResource(resources.find(r => r.id === "vm-idle-01") || null)}>
-                  <rect x="50" y="100" width="130" height="60" rx="6" fill="var(--card)" stroke={selectedResource?.id === "vm-idle-01" ? "var(--primary)" : "var(--border)"} strokeWidth={selectedResource?.id === "vm-idle-01" ? "2" : "1"} />
-                  <text x="62" y="125" className="text-[11px] font-semibold fill-foreground">vm-idle-01</text>
-                  <text x="62" y="142" className="text-[9px] fill-slate-400">Microsoft.Compute/VM</text>
-                  <circle cx="162" cy="130" r="4" fill="#ef4444" /> {/* Stopped indicator */}
-                </g>
-
-                {/* vm-over-01 */}
-                <g className="cursor-pointer" onClick={() => setSelectedResource(resources.find(r => r.id === "vm-over-01") || null)}
-                   onMouseEnter={() => setSelectedResource(resources.find(r => r.id === "vm-over-01") || null)}>
-                  <rect x="200" y="100" width="130" height="60" rx="6" fill="var(--card)" stroke={selectedResource?.id === "vm-over-01" ? "var(--primary)" : "var(--border)"} strokeWidth={selectedResource?.id === "vm-over-01" ? "2" : "1"} />
-                  <text x="212" y="125" className="text-[11px] font-semibold fill-foreground">vm-over-01</text>
-                  <text x="212" y="142" className="text-[9px] fill-slate-400">Microsoft.Compute/VM</text>
-                  <circle cx="312" cy="130" r="4" fill="#10b981" /> {/* Running indicator */}
-                </g>
-
-                {/* vm-busy-01 */}
-                <g className="cursor-pointer" onClick={() => setSelectedResource(resources.find(r => r.id === "vm-busy-01") || null)}
-                   onMouseEnter={() => setSelectedResource(resources.find(r => r.id === "vm-busy-01") || null)}>
-                  <rect x="50" y="180" width="130" height="60" rx="6" fill="var(--card)" stroke={selectedResource?.id === "vm-busy-01" ? "var(--primary)" : "var(--border)"} strokeWidth={selectedResource?.id === "vm-busy-01" ? "2" : "1"} />
-                  <text x="62" y="205" className="text-[11px] font-semibold fill-foreground">vm-busy-01</text>
-                  <text x="62" y="222" className="text-[9px] fill-slate-400">Microsoft.Compute/VM</text>
-                  <circle cx="162" cy="210" r="4" fill="#10b981" />
-                </g>
-
-                {/* vm-strict-01 */}
-                <g className="cursor-pointer" onClick={() => setSelectedResource(resources.find(r => r.id === "vm-strict-01") || null)}
-                   onMouseEnter={() => setSelectedResource(resources.find(r => r.id === "vm-strict-01") || null)}>
-                  <rect x="200" y="180" width="130" height="60" rx="6" fill="var(--card)" stroke={selectedResource?.id === "vm-strict-01" ? "var(--primary)" : "var(--border)"} strokeWidth={selectedResource?.id === "vm-strict-01" ? "2" : "1"} />
-                  <text x="212" y="205" className="text-[11px] font-semibold fill-foreground">vm-strict-01</text>
-                  <text x="212" y="222" className="text-[9px] fill-slate-400">Microsoft.Compute/VM</text>
-                  <circle cx="312" cy="210" r="4" fill="#10b981" />
-                </g>
-              </g>
-
-              {/* Resource Group 2: rg-dev (Developer playground) */}
-              <g id="rg-dev">
-                <rect x="370" y="60" width="280" height="120" rx="8" fill="var(--card)" fillOpacity="0.03" stroke="var(--border)" strokeWidth="1" />
-                <text x="385" y="80" className="text-xs font-bold fill-foreground/70 font-sans">rg-dev (Development)</text>
-                
-                {/* vm-dev-idle-01 */}
-                <g className="cursor-pointer" onClick={() => setSelectedResource(resources.find(r => r.id === "vm-dev-idle-01") || null)}
-                   onMouseEnter={() => setSelectedResource(resources.find(r => r.id === "vm-dev-idle-01") || null)}>
-                  <rect x="385" y="100" width="115" height="60" rx="6" fill="var(--card)" stroke={selectedResource?.id === "vm-dev-idle-01" ? "var(--primary)" : "var(--border)"} strokeWidth={selectedResource?.id === "vm-dev-idle-01" ? "2" : "1"} />
-                  <text x="395" y="125" className="text-[11px] font-semibold fill-foreground">vm-dev-idle-01</text>
-                  <text x="395" y="142" className="text-[9px] fill-slate-400">Microsoft.Compute/VM</text>
-                  <circle cx="485" cy="130" r="4" fill="#10b981" />
-                </g>
-
-                {/* disk-temp-01 */}
-                <g className="cursor-pointer" onClick={() => setSelectedResource(resources.find(r => r.id === "disk-temp-01") || null)}
-                   onMouseEnter={() => setSelectedResource(resources.find(r => r.id === "disk-temp-01") || null)}>
-                  <rect x="515" y="100" width="115" height="60" rx="6" fill="var(--card)" stroke={selectedResource?.id === "disk-temp-01" ? "var(--primary)" : "var(--border)"} strokeWidth={selectedResource?.id === "disk-temp-01" ? "2" : "1"} />
-                  <text x="525" y="125" className="text-[11px] font-semibold fill-foreground">disk-temp-01</text>
-                  <text x="525" y="142" className="text-[9px] fill-slate-400">Microsoft.Compute/Disk</text>
-                  <circle cx="615" cy="130" r="4" fill="#f59e0b" /> {/* Warning/Unattached */}
-                </g>
-              </g>
-
-              {/* Resource Group 3: rg-staging (Escalation sandbox) */}
-              <g id="rg-staging">
-                <rect x="370" y="200" width="280" height="120" rx="8" fill="var(--card)" fillOpacity="0.03" stroke="var(--border)" strokeWidth="1" />
-                <text x="385" y="220" className="text-xs font-bold fill-foreground/70 font-sans">rg-staging (Staging/Escalated)</text>
-
-                {/* vm-conflict-01 */}
-                <g className="cursor-pointer" onClick={() => setSelectedResource(resources.find(r => r.id === "vm-conflict-01") || null)}
-                   onMouseEnter={() => setSelectedResource(resources.find(r => r.id === "vm-conflict-01") || null)}>
-                  <rect x="385" y="240" width="115" height="60" rx="6" fill="var(--card)" stroke={selectedResource?.id === "vm-conflict-01" ? "var(--primary)" : "var(--border)"} strokeWidth={selectedResource?.id === "vm-conflict-01" ? "2" : "1"} />
-                  <text x="395" y="265" className="text-[11px] font-semibold fill-foreground">vm-conflict-01</text>
-                  <text x="395" y="282" className="text-[9px] fill-slate-400">Microsoft.Compute/VM</text>
-                  <circle cx="485" cy="270" r="4" fill="#ef4444" />
-                </g>
-
-                {/* vm-prod-active-02 */}
-                <g className="cursor-pointer" onClick={() => setSelectedResource(resources.find(r => r.id === "vm-prod-active-02") || null)}
-                   onMouseEnter={() => setSelectedResource(resources.find(r => r.id === "vm-prod-active-02") || null)}>
-                  <rect x="515" y="240" width="115" height="60" rx="6" fill="var(--card)" stroke={selectedResource?.id === "vm-prod-active-02" ? "var(--primary)" : "var(--border)"} strokeWidth={selectedResource?.id === "vm-prod-active-02" ? "2" : "1"} />
-                  <text x="525" y="265" className="text-[11px] font-semibold fill-foreground">vm-prod-active-02</text>
-                  <text x="525" y="282" className="text-[9px] fill-slate-400">Microsoft.Compute/VM</text>
-                  <circle cx="615" cy="270" r="4" fill="#10b981" />
-                </g>
-              </g>
-            </svg>
-          </div>
-
-          {/* Node Inspector Details Panel */}
-          <div className="p-6 border border-border bg-card/40 rounded-xl flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-4 border-b border-border pb-3">
-                <Info className="h-5 w-5 text-primary" />
-                <h4 className="font-heading font-semibold text-sm">Resource Inspector</h4>
-              </div>
-
-              {selectedResource ? (
-                <div className="space-y-4">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase text-muted block">Resource Name</span>
-                    <span className="text-sm font-bold text-foreground font-mono">{selectedResource.name}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold uppercase text-muted block">Provider Type</span>
-                    <span className="text-xs text-foreground truncate block font-mono">{selectedResource.type}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold uppercase text-muted block">Operational Status</span>
-                    <span className={`inline-block px-2 py-0.5 mt-1 rounded text-[10px] uppercase font-bold ${
-                      selectedResource.status === "Running"
-                        ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                        : selectedResource.status === "Stopped"
-                          ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
-                          : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-                    }`}>{selectedResource.status}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs pt-2 border-t border-border/50">
-                    <span className="flex items-center gap-1 text-muted">
-                      <MapPin className="h-3.5 w-3.5" /> {selectedResource.region}
-                    </span>
-                    <span className="text-muted font-mono">{selectedResource.last_seen ? "Last Seen: Today" : ""}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold uppercase text-muted block mb-1">Tags</span>
-                    <div className="flex flex-wrap gap-1">
-                      {Object.entries(selectedResource.tags).map(([k, v]) => (
-                        <span key={k} className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground border border-border/50">
-                          <Tag className="h-2 w-2" /> {k}: {v}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-muted italic text-center py-10">Select or hover a topology node to view configuration details.</p>
-              )}
-            </div>
-            
-            <div className="pt-4 border-t border-border/40 text-[10px] text-muted-foreground">
-              Topology map reflects resources grouped by mock Resource Group namespaces.
-            </div>
-          </div>
+        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>SYNCHRONIZED METADATA ASSETS</span>
         </div>
       </div>
 
-      {/* 2. Structured Resources Grid Table */}
-      <div className="p-6 bg-card border border-border rounded-xl">
-        <div className="flex items-center gap-2 mb-4">
-          <Database className="h-5 w-5 text-primary" />
-          <h3 className="font-heading font-semibold text-base">Discovered Asset Inventory</h3>
+      {/* Filter and Search Bar */}
+      <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl space-y-4 shadow-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4.5 w-4.5 text-indigo-400" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">Asset Discovery Query Engine</h3>
+          </div>
+          <span className="text-[10px] font-mono font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">
+            TOTAL ASSETS Discovered: {resources.length}
+          </span>
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Search Input */}
+          <div className="relative md:col-span-2">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Search assets by name, ID, or tag details..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-4 py-2 w-full bg-[#090b0f] border border-[#22252d] rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-0"
+            />
+          </div>
+
+          {/* Type Filter */}
+          <select
+            value={selectedType}
+            onChange={(e) => setSelectedType(e.target.value)}
+            className="px-3 py-2 bg-[#090b0f] border border-[#22252d] rounded-lg text-xs text-slate-200 focus:border-indigo-500/50 focus:outline-none focus:ring-0 cursor-pointer"
+          >
+            <option value="all">All Resource Classes</option>
+            {uniqueTypes.filter(t => t !== "all").map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+
+          {/* Region Filter */}
+          <select
+            value={selectedRegion}
+            onChange={(e) => setSelectedRegion(e.target.value)}
+            className="px-3 py-2 bg-[#090b0f] border border-[#22252d] rounded-lg text-xs text-slate-200 focus:border-indigo-500/50 focus:outline-none focus:ring-0 cursor-pointer"
+          >
+            <option value="all">All Regions</option>
+            {uniqueRegions.filter(r => r !== "all").map(r => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Grid Assets Table */}
+      <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl shadow-lg">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-border text-muted uppercase font-bold text-[10px] tracking-wider">
-                <th className="py-3 px-4">Name</th>
-                <th className="py-3 px-4">Type</th>
-                <th className="py-3 px-4">Region</th>
+              <tr className="border-b border-[#22252d] text-slate-400 uppercase font-bold text-[10px] tracking-wider">
+                <th className="py-3 px-4">Asset Name</th>
+                <th className="py-3 px-4">Resource Class</th>
+                <th className="py-3 px-4">Datacenter Region</th>
                 <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Tags</th>
-                <th className="py-3 px-4">Last Synced</th>
+                <th className="py-3 px-4">Metadata Tags</th>
+                <th className="py-3 px-4">Last Scanned Date</th>
               </tr>
             </thead>
             <tbody>
-              {resources.map((res) => (
-                <tr key={res.id} className="border-b border-border hover:bg-muted/10 transition-all">
-                  <td className="py-3.5 px-4 font-mono font-bold text-foreground">{res.name}</td>
-                  <td className="py-3.5 px-4 text-muted-foreground font-mono">{res.type}</td>
-                  <td className="py-3.5 px-4 text-muted-foreground">{res.region}</td>
-                  <td className="py-3.5 px-4">
-                    <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
-                      res.status === "Running"
-                        ? "bg-emerald-500/10 text-emerald-500"
-                        : res.status === "Stopped"
-                          ? "bg-rose-500/10 text-rose-500"
-                          : "bg-amber-500/10 text-amber-500"
-                    }`}>
-                      {res.status}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <div className="flex flex-wrap gap-1">
-                      {Object.entries(res.tags).map(([k, v]) => (
-                        <span key={k} className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/20">
-                          {k}={v}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-400 font-mono">
-                    {new Date(res.last_seen).toLocaleString()}
+              {filteredResources.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-500 italic">
+                    No discovered resources matching the active filter query parameters.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredResources.map((res) => (
+                  <tr key={res.id} className="border-b border-[#1c1e24] hover:bg-[#16191f]/50 transition-all duration-150">
+                    <td className="py-3.5 px-4 font-mono font-bold text-white flex items-center gap-2">
+                      {res.type.toLowerCase().includes("vm") ? (
+                        <Cpu className="h-3.5 w-3.5 text-indigo-400" />
+                      ) : (
+                        <Server className="h-3.5 w-3.5 text-purple-400" />
+                      )}
+                      <span>{res.name}</span>
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-400 font-mono text-[10px]">{res.type}</td>
+                    <td className="py-3.5 px-4 text-slate-400 flex items-center gap-1.5 mt-1">
+                      <Globe className="h-3.5 w-3.5 text-slate-500" />
+                      <span>{res.region}</span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold uppercase font-mono border ${
+                        res.status === "Running"
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                          : res.status === "Stopped"
+                            ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                            : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                      }`}>
+                        <circle cx="2" cy="2" r="2" fill={
+                          res.status === "Running" ? "#10b981" : res.status === "Stopped" ? "#f43f5e" : "#f59e0b"
+                        } />
+                        {res.status}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(res.tags).map(([k, v]) => (
+                          <span key={k} className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-[#181b21] text-slate-400 border border-[#22252d]">
+                            <Tag className="h-2.5 w-2.5" />
+                            <span>{k}={v}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-500 font-mono text-[10px]">
+                      {new Date(res.last_seen).toLocaleString()}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

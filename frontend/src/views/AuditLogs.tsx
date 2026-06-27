@@ -39,35 +39,43 @@ export function AuditLogs({ runs, refresh }: AuditLogsProps) {
   });
 
   return (
-    <div className="space-y-8">
-      
-      {/* Filters Toolbar */}
-      <div className="p-6 bg-card border border-border rounded-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            <h3 className="font-heading font-semibold text-base">Autopilot System Audit Ledger</h3>
-          </div>
-          
+    <div className="space-y-8 animate-fadeIn">
+      {/* Header Widget */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#22252d] pb-6">
+        <div>
+          <h2 className="text-xl font-extrabold text-white tracking-wide">SYSTEM AUDIT LEDGER</h2>
+          <p className="text-xs text-slate-400 mt-1">Immutable ledger logs capturing all orchestrator steps and dry-run execution results.</p>
+        </div>
+        <div className="flex items-center gap-2">
           <button
             onClick={refresh}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-border text-xs hover:bg-muted font-medium transition-all"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#22252d] bg-[#181b21] text-xs hover:bg-[#1c1e24] text-slate-200 font-bold uppercase transition-all duration-150"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             <span>Sync Ledger</span>
           </button>
         </div>
+      </div>
+
+      {/* Filters Toolbar */}
+      <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl space-y-4 shadow-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4.5 w-4.5 text-indigo-400" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">Ledger Query Filter</h3>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Search bar */}
           <div className="relative md:col-span-2">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
             <input
               type="text"
-              placeholder="Search by Run ID, step, payload content..."
+              placeholder="Search by Run ID, step, event types, payloads..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 w-full bg-muted/20 border border-border rounded-lg text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+              className="pl-9 pr-4 py-2 w-full bg-[#090b0f] border border-[#22252d] rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-0"
             />
           </div>
 
@@ -75,7 +83,7 @@ export function AuditLogs({ runs, refresh }: AuditLogsProps) {
           <select
             value={filterAgent}
             onChange={(e) => setFilterAgent(e.target.value)}
-            className="px-3 py-2 bg-muted/20 border border-border rounded-lg text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+            className="px-3 py-2 bg-[#090b0f] border border-[#22252d] rounded-lg text-xs text-slate-200 focus:border-indigo-500/50 focus:outline-none focus:ring-0 cursor-pointer"
           >
             <option value="all">All Agents</option>
             <option value="orchestrator">Orchestrator</option>
@@ -89,7 +97,7 @@ export function AuditLogs({ runs, refresh }: AuditLogsProps) {
           <select
             value={filterEvent}
             onChange={(e) => setFilterEvent(e.target.value)}
-            className="px-3 py-2 bg-muted/20 border border-border rounded-lg text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+            className="px-3 py-2 bg-[#090b0f] border border-[#22252d] rounded-lg text-xs text-slate-200 focus:border-indigo-500/50 focus:outline-none focus:ring-0 cursor-pointer"
           >
             <option value="all">All Events</option>
             <option value="WorkflowStarted">WorkflowStarted</option>
@@ -102,18 +110,18 @@ export function AuditLogs({ runs, refresh }: AuditLogsProps) {
       </div>
 
       {/* Grid List and Inspector Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Logs Table List */}
-        <div className="lg:col-span-2 p-6 bg-card border border-border rounded-xl">
-          <div className="overflow-x-auto max-h-[480px] overflow-y-auto pr-1">
+        <div className="lg:col-span-2 p-6 bg-[#111318] border border-[#22252d] rounded-xl shadow-lg">
+          <div className="overflow-x-auto max-h-[480px] overflow-y-auto pr-1 custom-scrollbar">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-border text-muted uppercase font-bold text-[10px] tracking-wider sticky top-0 bg-card z-15">
+                <tr className="border-b border-[#22252d] text-slate-400 uppercase font-bold text-[10px] tracking-wider sticky top-0 bg-[#111318] z-15">
                   <th className="py-3 px-4">Time</th>
                   <th className="py-3 px-4">Run ID</th>
-                  <th className="py-3 px-4">Agent</th>
-                  <th className="py-3 px-4">Event</th>
+                  <th className="py-3 px-4">Agent Name</th>
+                  <th className="py-3 px-4">Event Tag</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4 text-center">Inspect</th>
                 </tr>
@@ -121,28 +129,28 @@ export function AuditLogs({ runs, refresh }: AuditLogsProps) {
               <tbody>
                 {filteredLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-muted italic">
-                      No matching audit logs found.
+                    <td colSpan={6} className="py-12 text-center text-slate-500 italic">
+                      No matching audit logs found in the systems directory.
                     </td>
                   </tr>
                 ) : (
                   filteredLogs.map((log) => (
-                    <tr key={log.id} className="border-b border-border hover:bg-muted/10 transition-all">
+                    <tr key={log.id} className="border-b border-[#1c1e24]/60 hover:bg-[#16191f]/50 transition-all duration-150">
                       <td className="py-3.5 px-4 font-mono text-slate-400">
                         {new Date(log.timestamp).toLocaleTimeString()}
                       </td>
-                      <td className="py-3.5 px-4 font-mono text-muted-foreground truncate max-w-[100px]" title={log.run_id}>
+                      <td className="py-3.5 px-4 font-mono text-slate-400 truncate max-w-[100px]" title={log.run_id}>
                         {log.run_id}
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className="font-semibold text-foreground capitalize">{log.agent_name}</span>
+                        <span className="font-extrabold text-slate-200 capitalize font-mono text-[10px] tracking-wide">{log.agent_name}</span>
                       </td>
-                      <td className="py-3.5 px-4 text-pink-400 font-bold font-mono">{log.event_type}</td>
+                      <td className="py-3.5 px-4 text-pink-400 font-extrabold font-mono text-[10px]">{log.event_type}</td>
                       <td className="py-3.5 px-4">
-                        <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase border ${
                           log.status === "success" 
-                            ? "bg-emerald-500/10 text-emerald-500" 
-                            : "bg-rose-500/10 text-rose-500"
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                            : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                         }`}>
                           {log.status}
                         </span>
@@ -150,9 +158,9 @@ export function AuditLogs({ runs, refresh }: AuditLogsProps) {
                       <td className="py-3.5 px-4 text-center">
                         <button
                           onClick={() => setSelectedLog(log)}
-                          className="p-1 rounded hover:bg-muted text-primary hover:text-primary-foreground transition-all"
+                          className="p-1 rounded bg-[#181b21] hover:bg-indigo-500 text-slate-400 hover:text-white border border-[#22252d] transition-all"
                         >
-                          <Eye className="h-4 w-4" />
+                          <Eye className="h-3.5 w-3.5" />
                         </button>
                       </td>
                     </tr>
@@ -164,41 +172,45 @@ export function AuditLogs({ runs, refresh }: AuditLogsProps) {
         </div>
 
         {/* Audit Inspector Panel */}
-        <div className="p-6 bg-card border border-border rounded-xl flex flex-col justify-between">
+        <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl flex flex-col justify-between shadow-lg">
           <div>
-            <div className="flex items-center gap-2 mb-4 border-b border-border pb-3">
-              <FileText className="h-5 w-5 text-primary" />
-              <h4 className="font-heading font-semibold text-sm">Audit Payload Inspector</h4>
+            <div className="flex items-center gap-2 mb-6 border-b border-[#22252d] pb-4">
+              <FileText className="h-4.5 w-4.5 text-indigo-400" />
+              <h4 className="font-heading font-extrabold text-xs uppercase tracking-wider text-slate-200">Payload Inspector</h4>
             </div>
 
             {selectedLog ? (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-muted block">Run ID</span>
-                  <span className="text-xs text-foreground font-mono font-bold">{selectedLog.run_id}</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block font-mono">Workflow Run ID</span>
+                  <span className="text-xs text-white font-mono font-bold">{selectedLog.run_id}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-muted block">Triggered By</span>
-                  <span className="text-xs text-foreground font-mono">{selectedLog.agent_name} [{selectedLog.step_name}]</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block font-mono">Trigger Instance</span>
+                  <span className="text-xs text-slate-300 font-mono font-semibold">{selectedLog.agent_name} [{selectedLog.step_name}]</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-muted block">Event Type</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block font-mono">Event Class</span>
                   <span className="text-xs text-pink-400 font-mono font-bold">{selectedLog.event_type}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-muted block mb-1">Payload Content</span>
-                  <div className="bg-black/95 rounded-lg p-3 font-mono text-[10px] text-emerald-400 overflow-x-auto max-h-60 border border-border/10">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block font-mono mb-2">Payload Content</span>
+                  <div className="bg-[#090b0f] rounded-lg p-4 font-mono text-[10px] text-emerald-400 overflow-x-auto max-h-56 border border-[#22252d] custom-scrollbar">
                     <pre>{JSON.stringify(selectedLog.payload, null, 2)}</pre>
                   </div>
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-muted italic text-center py-20">Click the eye button on any log entry row to view details.</p>
+              <div className="text-center py-20">
+                <FileText className="h-8 w-8 text-slate-600 mx-auto mb-3 animate-pulse" />
+                <p className="text-xs text-slate-400 font-medium">Select a ledger entry</p>
+                <p className="text-[10px] text-slate-500 mt-1 leading-normal">Inspect metadata payloads from the table lists.</p>
+              </div>
             )}
           </div>
 
-          <div className="pt-4 border-t border-border/40 text-[10px] text-muted-foreground">
-            Audit logging records are collected dynamically via event subscription hooks.
+          <div className="pt-4 border-t border-[#22252d] text-[9px] text-slate-500 font-mono leading-relaxed">
+            Ledger log tracking records are stored immutably inside the local databases.
           </div>
         </div>
 

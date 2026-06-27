@@ -6,6 +6,7 @@ export function useWorkflow() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runDetails, setRunDetails] = useState<RunDetailsDTO | null>(null);
   const [runs, setRuns] = useState<RunDTO[]>([]);
+  const [runsDetails, setRunsDetails] = useState<RunDetailsDTO[]>([]);
   const [resources, setResources] = useState<ResourceDTO[]>([]);
   const [recommendations, setRecommendations] = useState<RecommendationDTO[]>([]);
   const [approvals, setApprovals] = useState<ApprovalDTO[]>([]);
@@ -27,6 +28,24 @@ export function useWorkflow() {
       setResources(resRes.data);
       setRecommendations(recRes.data);
       setApprovals(appRes.data);
+
+      // Fetch details for all runs in parallel
+      const runsList = runsRes.data;
+      const detailsList = await Promise.all(
+        runsList.map(async (run) => {
+          try {
+            const details = await api.getRunDetails(run.id);
+            return details.data;
+          } catch (err) {
+            return {
+              db_record: run,
+              in_memory_state: null,
+              audit_logs: []
+            };
+          }
+        })
+      );
+      setRunsDetails(detailsList);
     } catch (err: any) {
       console.error("Failed to load global workspace state:", err);
       setError("Failed to sync workspace database metrics.");
@@ -144,6 +163,7 @@ export function useWorkflow() {
 
   return {
     runs,
+    runsDetails,
     resources,
     recommendations,
     approvals,
