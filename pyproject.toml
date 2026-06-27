@@ -1,0 +1,39 @@
+[project]
+name = "cloudops-autopilot"
+version = "0.1.0"
+description = "AI-Driven CloudOps Autopilot for Adaptive Provisioning and Cost Governance"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+    "pydantic>=2.6.0",
+    "sqlalchemy>=2.0.28",
+    "azure-identity>=1.15.0",
+    "azure-mgmt-compute>=30.0.0",
+    "azure-mgmt-resource>=23.0.0",
+    "azure-mgmt-monitor>=6.0.0",
+    "azure-mgmt-web>=7.0.0",
+    "mcp>=0.1.0",
+    "google-genai>=0.1.0",
+    "psycopg2-binary>=2.9.9",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "pydantic-settings>=2.2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.3.0",
+    "mypy>=1.9.0",
+    "httpx>=0.27.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agents", "backend", "cloud_adapter", "mcp_server", "shared"]

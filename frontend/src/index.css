@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #f8fafc;
+    --foreground: #0f172a;
+    --border: #e2e8f0;
+    
+    --primary: #4f46e5;
+    --primary-foreground: #ffffff;
+    
+    --card: #ffffff;
+    --card-foreground: #0f172a;
+    
+    --accent: #06b6d4;
+    --accent-foreground: #ffffff;
+    
+    --muted: #64748b;
+    --muted-foreground: #f1f5f9;
+  }
+
+  .dark {
+    --background: #0f172a;
+    --foreground: #f8fafc;
+    --border: #1e293b;
+    
+    --primary: #6366f1;
+    --primary-foreground: #ffffff;
+    
+    --card: #1e293b;
+    --card-foreground: #f8fafc;
+    
+    --accent: #22d3ee;
+    --accent-foreground: #0f172a;
+    
+    --muted: #94a3b8;
+    --muted-foreground: #1e293b;
+  }
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', system-ui, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Custom Scrollbar for dashboard elegance */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
