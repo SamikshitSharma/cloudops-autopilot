@@ -96,3 +96,22 @@ Execute the entire test suite:
 ```bash
 uv run pytest
 ```
+
+### Running the Frontend Dashboard
+Navigate to the `frontend` directory, install Node modules, and launch the Vite development server:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Open your browser and navigate to `http://localhost:5173` (or the port specified by Vite) to view the interactive dashboard.
+
+---
+
+## 6. Configuring Cloud Execution Modes
+The system can operate in two different cloud modes managed in the `.env` configuration file:
+*   **`CLOUD_MODE=LIVE`**: Integrates directly with the Azure Resource Manager SDK using `DefaultAzureCredential`. Auto-discovers running resources and queries Azure Monitor timeseries telemetry.
+*   **`CLOUD_MODE=MOCK`**: Emulates Azure operations in memory using a simulated client structure. Ideal for offline validation, unit testing, and sandbox environments without subscription access.
+
+If the live Azure client encounters connection or authentication errors during `LIVE` execution, it will automatically fall back to the `MOCK` client state to ensure uninterrupted operation.
+
