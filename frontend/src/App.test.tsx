@@ -40,6 +40,9 @@ vi.mock("lucide-react", () => ({
   Settings: () => <span>Settings</span>,
   Search: () => <span>Search</span>,
   Zap: () => <span>Zap</span>,
+  Send: () => <span>Send</span>,
+  Sparkle: () => <span>Sparkle</span>,
+  MessageSquare: () => <span>MessageSquare</span>,
 }));
 
 vi.mock("recharts", () => ({
