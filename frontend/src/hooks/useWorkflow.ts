@@ -57,17 +57,17 @@ export function useWorkflow() {
       const details = await api.getRunDetails(runId);
       setRunDetails(details.data);
       
-      // If the run reached a terminal state, clear active run so polling stops
-      const status = details.data.db_record.status;
-      if (status === "completed" || status === "failed") {
-        setActiveRunId(null);
-      }
+      // We no longer clear activeRunId on terminal states.
+      // Polling naturally stops because shouldPoll will become false.
     } catch (err: any) {
       console.error(`Failed to fetch run details for ${runId}:`, err);
     }
   }, []);
 
-  // Poll details when activeRunId changes
+  // Determine if we should poll
+  const shouldPoll = activeRunId && runDetails?.db_record.status === "running";
+
+  // Poll details when activeRunId changes and is running
   useEffect(() => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
@@ -78,11 +78,15 @@ export function useWorkflow() {
       return;
     }
 
-    // Fetch immediately
+    // Always fetch once when activeRunId changes
     fetchDetails(activeRunId);
     fetchGlobalState();
 
-    // Setup 2-second short polling interval
+    if (!shouldPoll) {
+      return;
+    }
+
+    // Setup 2-second short polling interval ONLY when running
     pollingRef.current = setInterval(() => {
       fetchDetails(activeRunId);
       fetchGlobalState();
@@ -94,7 +98,7 @@ export function useWorkflow() {
         pollingRef.current = null;
       }
     };
-  }, [activeRunId, fetchDetails, fetchGlobalState]);
+  }, [activeRunId, shouldPoll, fetchDetails, fetchGlobalState]);
 
   // Initial load
   useEffect(() => {

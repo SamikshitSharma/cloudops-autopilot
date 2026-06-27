@@ -1,38 +1,37 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { 
-  DollarSign, 
-  CheckCircle, 
-  AlertTriangle, 
-  RefreshCw, 
   Activity, 
+  Terminal, 
+  Zap, 
   Cpu, 
-  Database, 
-  ShieldCheck 
+  Database,
+  Network,
+  ShieldAlert,
+  ShieldCheck,
+  CheckCircle2,
+  Clock,
+  RefreshCw,
+  Search,
+  FileCode,
+  Lock
 } from "lucide-react";
 import { 
   ResponsiveContainer, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  Tooltip, 
-  PieChart, 
-  Pie, 
-  Cell,
   AreaChart,
-  Area
+  Area,
+  Tooltip,
+  XAxis,
+  YAxis
 } from "recharts";
-import type { RunDTO, RecommendationDTO, ApprovalDTO, ResourceDTO } from "../api/client";
+import type { RunDTO, RecommendationDTO, ApprovalDTO, ResourceDTO, RunDetailsDTO } from "../api/client";
 
 interface OverviewProps {
   runs: RunDTO[];
   resources: ResourceDTO[];
   recommendations: RecommendationDTO[];
   approvals: ApprovalDTO[];
-  activeRunDetails?: any;
+  activeRunDetails?: RunDetailsDTO | null;
 }
-
-const COLORS = ["#6366f1", "#06b6d4", "#f43f5e", "#eab308"];
 
 export function Overview({ runs, resources, recommendations, approvals, activeRunDetails }: OverviewProps) {
   // 1. Calculate Metrics
@@ -43,259 +42,295 @@ export function Overview({ runs, resources, recommendations, approvals, activeRu
 
   const pendingApprovals = approvals.filter(a => a.status === "pending").length;
   const activeRuns = runs.filter(r => r.status === "running").length;
+  
+  // Is there a currently executing run?
+  const isRunning = activeRunDetails?.db_record?.status === "running";
+  
+  // Extract real agent metrics from the active run
+  const activeLogs = activeRunDetails?.audit_logs || [];
+  const latestLog = activeLogs.length > 0 ? activeLogs[activeLogs.length - 1] : null;
 
-  // 2. Prepare Chart Data (Savings by Action Type)
-  const savingsByActionMap = recommendations.reduce((acc, r) => {
-    acc[r.action_type] = (acc[r.action_type] || 0) + r.saving_amount;
-    return acc;
-  }, {} as Record<string, number>);
+  // Determine which agent is currently active based on the last log
+  const currentAgent = latestLog?.agent_name || "idle";
 
-  const actionChartData = Object.entries(savingsByActionMap).map(([name, value]) => ({
-    name: name.toUpperCase(),
-    value,
-  }));
+  // Derive progress states from the active run's in-memory steps
+  const steps = activeRunDetails?.in_memory_state?.steps || [];
+  
+  const getStepStatus = (stepName: string) => {
+    const step = steps.find(s => s.step_name === stepName);
+    if (!step) return "pending";
+    return step.status.toLowerCase();
+  };
 
-  // 3. Prepare Chart Data (Savings by Risk Level)
-  const savingsByRiskMap = recommendations.reduce((acc, r) => {
-    acc[r.risk_level] = (acc[r.risk_level] || 0) + r.saving_amount;
-    return acc;
-  }, {} as Record<string, number>);
+  const telemetryStatus = getStepStatus("metric_analysis");
+  const policyStatus = getStepStatus("decision_making");
+  const executionStatus = getStepStatus("remediation_execution");
 
-  const riskChartData = Object.entries(savingsByRiskMap).map(([name, value]) => ({
-    name: name === "low" ? "Low Risk" : "High Risk",
-    value,
-  }));
+  // Determine latest recommendation (if any) to feature
+  const latestRecommendation = useMemo(() => {
+    if (recommendations.length === 0) return null;
+    return [...recommendations].sort((a, b) => b.saving_amount - a.saving_amount)[0];
+  }, [recommendations]);
 
-  // 4. Generate mock timeline data for savings growth
-  const savingsTimelineData = [
-    { name: "06-21", amount: totalRealized * 0.4 },
-    { name: "06-22", amount: totalRealized * 0.45 },
-    { name: "06-23", amount: totalRealized * 0.6 },
-    { name: "06-24", amount: totalRealized * 0.75 },
-    { name: "06-25", amount: totalRealized * 0.8 },
-    { name: "06-26", amount: totalRealized * 0.95 },
-    { name: "06-27", amount: totalRealized },
-  ];
+  // Aggregate savings for the chart based on historical runs and their generated recommendations
+  // Note: For a true production app, this would come directly from a /metrics endpoint. 
+  // Here we derive it directly from the recommendations array to avoid fake data.
+  const realizedRecos = recommendations.filter(r => r.status === "executed" || r.status === "approved");
+  const savingsTimelineData = useMemo(() => {
+    let cumulative = 0;
+    // Mocking dates since the actual recommendation DTO doesn't have a created_at in our simplified schema,
+    // but in reality we would group by date. We will group by resource ID as a proxy for "steps" to show a real line.
+    return realizedRecos.map((reco, idx) => {
+      cumulative += reco.saving_amount;
+      return { name: `Action ${idx + 1}`, amount: cumulative };
+    });
+  }, [realizedRecos]);
 
   return (
-    <div className="space-y-8 animate-fadeIn">
-      {/* Header Widget */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#22252d] pb-6">
+    <div className="space-y-6">
+      
+      {/* Landing Header */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-border">
         <div>
-          <h2 className="text-xl font-extrabold text-white tracking-wide">EXECUTIVE OVERVIEW</h2>
-          <p className="text-xs text-slate-400 mt-1">Cross-subscription analysis and cost-optimization telemetry reports.</p>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">Live Intelligence</h2>
+          <p className="text-sm text-muted-foreground mt-1">Real-time autonomous cloud operations and reasoning.</p>
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>LAST UPDATED: JUST NOW</span>
-        </div>
-      </div>
-
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* Discovered Savings */}
-        <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl flex items-center justify-between shadow-lg relative overflow-hidden group hover:border-indigo-500/30 transition-all duration-200">
-          <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500" />
-          <div>
-            <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase font-mono">Discovered Savings</p>
-            <h3 className="text-2xl font-extrabold text-white font-mono mt-1.5">${totalDiscovered.toFixed(2)}</h3>
-            <p className="text-[9px] text-slate-500 font-medium mt-1">Potential monthly reduction</p>
-          </div>
-          <div className="p-3 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 group-hover:scale-105 transition-transform duration-200">
-            <DollarSign className="h-5 w-5" />
-          </div>
-        </div>
-
-        {/* Realized Savings */}
-        <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl flex items-center justify-between shadow-lg relative overflow-hidden group hover:border-emerald-500/30 transition-all duration-200">
-          <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500" />
-          <div>
-            <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase font-mono">Realized Savings</p>
-            <h3 className="text-2xl font-extrabold text-emerald-400 font-mono mt-1.5">${totalRealized.toFixed(2)}</h3>
-            <p className="text-[9px] text-slate-500 font-medium mt-1">Completed actions cost reduction</p>
-          </div>
-          <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 group-hover:scale-105 transition-transform duration-200">
-            <CheckCircle className="h-5 w-5" />
-          </div>
-        </div>
-
-        {/* Pending Approvals */}
-        <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl flex items-center justify-between shadow-lg relative overflow-hidden group hover:border-amber-500/30 transition-all duration-200">
-          <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500" />
-          <div>
-            <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase font-mono">Pending Approvals</p>
-            <h3 className="text-2xl font-extrabold text-amber-500 font-mono mt-1.5">{pendingApprovals}</h3>
-            <p className="text-[9px] text-slate-500 font-medium mt-1">Actions blocked by guardrails</p>
-          </div>
-          <div className="p-3 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 group-hover:scale-105 transition-transform duration-200">
-            <AlertTriangle className="h-5 w-5" />
-          </div>
-        </div>
-
-        {/* Active Sweeps */}
-        <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl flex items-center justify-between shadow-lg relative overflow-hidden group hover:border-cyan-500/30 transition-all duration-200">
-          <div className="absolute top-0 left-0 w-1.5 h-full bg-cyan-500" />
-          <div>
-            <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase font-mono">Active Sweeps</p>
-            <h3 className="text-2xl font-extrabold text-white font-mono mt-1.5">{activeRuns}</h3>
-            <p className="text-[9px] text-slate-500 font-medium mt-1">Autonomous reasoning tasks</p>
-          </div>
-          <div className="p-3 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 group-hover:scale-105 transition-transform duration-200">
-            <RefreshCw className={`h-5 w-5 ${activeRuns > 0 ? "animate-spin" : ""}`} />
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md border border-border">
+            <span className="relative flex h-2 w-2">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isRunning ? 'bg-emerald-400' : 'bg-muted-foreground'}`}></span>
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${isRunning ? 'bg-emerald-500' : 'bg-muted-foreground'}`}></span>
+            </span>
+            <span className="text-[11px] font-mono font-medium text-foreground uppercase tracking-wider">
+              {isRunning ? "Agents Active" : "Monitoring Idle"}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Visual Analytics Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Autonomous Brain Live Streams - REAL DATA ONLY */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         
-        {/* Realized Savings Timeline Chart */}
-        <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl shadow-lg lg:col-span-2">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">Realized Savings Velocity ($)</h3>
-            <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-[#181b21] border border-[#22252d] text-slate-400">CUMULATIVE VIEW</span>
+        {/* Telemetry Agent */}
+        <div className={`glass-panel p-5 rounded-lg flex flex-col justify-between transition-colors ${telemetryStatus === 'running' ? 'border-primary shadow-sm shadow-primary/20' : ''}`}>
+          <div className="flex items-center justify-between mb-4">
+            <div className={`flex items-center gap-2 ${telemetryStatus === 'running' ? 'text-primary' : 'text-muted-foreground'}`}>
+              <Activity className="h-4 w-4" />
+              <span className="text-xs font-bold uppercase tracking-widest font-mono">Telemetry Agent</span>
+            </div>
+            {telemetryStatus === 'running' && <span className="h-1.5 w-1.5 bg-primary rounded-full animate-pulse" />}
+            {telemetryStatus === 'completed' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
           </div>
-          <div className="h-68">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={savingsTimelineData}>
-                <defs>
-                  <linearGradient id="colorSavings" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="name" stroke="#525866" fontSize={10} tickLine={false} />
-                <YAxis stroke="#525866" fontSize={10} tickLine={false} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: "#111318", borderColor: "#22252d", borderRadius: "8px", fontSize: "11px" }}
-                  labelStyle={{ color: "#94a3b8" }}
-                />
-                <Area type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorSavings)" />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="space-y-2">
+            <p className="text-[11px] text-muted-foreground font-mono">
+              {telemetryStatus === 'running' ? "Collecting metrics..." : 
+               telemetryStatus === 'completed' ? "Collection complete." : "Waiting for trigger..."}
+            </p>
           </div>
         </div>
 
-        {/* Risk Profile Pie Chart */}
-        <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl shadow-lg">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">Risk Profile Rationale</h3>
-            <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-[#181b21] border border-[#22252d] text-slate-400">TOTAL SAVINGS</span>
+        {/* Policy Agent */}
+        <div className={`glass-panel p-5 rounded-lg flex flex-col justify-between transition-colors ${policyStatus === 'running' ? 'border-emerald-500 shadow-sm shadow-emerald-500/20' : ''}`}>
+          <div className="flex items-center justify-between mb-4">
+            <div className={`flex items-center gap-2 ${policyStatus === 'running' ? 'text-emerald-500' : 'text-muted-foreground'}`}>
+              <ShieldCheck className="h-4 w-4" />
+              <span className="text-xs font-bold uppercase tracking-widest font-mono">Policy Agent</span>
+            </div>
+            {policyStatus === 'running' && <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse" />}
+            {policyStatus === 'completed' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
           </div>
-          <div className="h-68 flex flex-col items-center justify-center">
-            <div className="w-full h-40 flex items-center justify-center relative">
-              {riskChartData.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">No risk recommendations</p>
+          <div className="space-y-2">
+            <p className="text-[11px] text-muted-foreground font-mono">
+              {policyStatus === 'running' ? "Evaluating guardrails..." : 
+               policyStatus === 'completed' ? "Governance enforced." : "Awaiting telemetry..."}
+            </p>
+          </div>
+        </div>
+
+        {/* Execution Agent */}
+        <div className={`glass-panel p-5 rounded-lg flex flex-col justify-between transition-colors ${executionStatus === 'running' ? 'border-amber-500 shadow-sm shadow-amber-500/20' : ''}`}>
+          <div className="flex items-center justify-between mb-4">
+            <div className={`flex items-center gap-2 ${executionStatus === 'running' ? 'text-amber-500' : 'text-muted-foreground'}`}>
+              <Zap className="h-4 w-4" />
+              <span className="text-xs font-bold uppercase tracking-widest font-mono">Execution Agent</span>
+            </div>
+            {executionStatus === 'running' && <span className="h-1.5 w-1.5 bg-amber-500 rounded-full animate-pulse" />}
+            {executionStatus === 'completed' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+          </div>
+          <div className="space-y-2">
+            <p className="text-[11px] text-muted-foreground font-mono">
+              {executionStatus === 'running' ? "Executing cloud payload..." : 
+               executionStatus === 'completed' ? "Remediation applied." : 
+               activeRunDetails?.db_record.status === "blocked_on_approval" ? "Awaiting human approval gate..." :
+               "Awaiting plan..."}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Active Executive Log - REAL DATA */}
+      <div className="w-full bg-card border border-border rounded-lg p-4 font-mono text-[11px] flex items-center gap-3 shadow-sm">
+        <Terminal className="h-4 w-4 text-muted-foreground" />
+        <span className="text-primary font-bold">EXECUTIVE_STDOUT &gt;</span>
+        <span className={`text-foreground truncate flex-1 ${isRunning ? "animate-pulse" : ""}`}>
+          {latestLog ? `[${latestLog.agent_name.replace('_agent', '').toUpperCase()}] ${latestLog.payload?.message || latestLog.event_type}` : "All autonomous sweeps completed. System idle."}
+        </span>
+      </div>
+
+      {/* Dense Dashboard Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        
+        {/* Left Column: Velocity & Finances (3 cols) */}
+        <div className="lg:col-span-3 space-y-6">
+          <div className="grid grid-cols-3 gap-4">
+            {/* Quick Stat Blocks */}
+            <div className="bg-card border border-border p-5 rounded-lg">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground mb-1">Discovered Savings</p>
+              <h3 className="text-3xl font-bold font-mono tracking-tighter text-foreground">${totalDiscovered.toFixed(2)}</h3>
+              <p className="text-[10px] text-muted-foreground mt-2">Potential monthly MRR reduction</p>
+            </div>
+            <div className="bg-card border border-border p-5 rounded-lg relative overflow-hidden">
+              <div className="absolute right-0 top-0 w-1 h-full bg-emerald-500" />
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground mb-1">Realized Savings</p>
+              <h3 className="text-3xl font-bold font-mono tracking-tighter text-emerald-500">${totalRealized.toFixed(2)}</h3>
+              <p className="text-[10px] text-muted-foreground mt-2">Actions securely executed</p>
+            </div>
+            <div className="bg-card border border-border p-5 rounded-lg relative overflow-hidden">
+              <div className="absolute right-0 top-0 w-1 h-full bg-amber-500" />
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground mb-1">Pending Gate</p>
+              <h3 className="text-3xl font-bold font-mono tracking-tighter text-foreground">{pendingApprovals}</h3>
+              <p className="text-[10px] text-muted-foreground mt-2">Approvals waiting for signature</p>
+            </div>
+          </div>
+
+          {/* Cost Velocity Chart */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Cumulative Realized Savings</h3>
+                <p className="text-[11px] text-muted-foreground">Historical progression of executed optimizations</p>
+              </div>
+            </div>
+            <div className="h-64">
+              {savingsTimelineData.length === 0 ? (
+                <div className="h-full w-full flex items-center justify-center border border-dashed border-border rounded-lg">
+                  <p className="text-xs text-muted-foreground italic font-mono">No executed savings data available.</p>
+                </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={riskChartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={45}
-                      outerRadius={65}
-                      paddingAngle={4}
-                      dataKey="value"
-                    >
-                      {riskChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
+                  <AreaChart data={savingsTimelineData}>
+                    <defs>
+                      <linearGradient id="colorSavings" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} 
+                      dy={10}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                      tickFormatter={(val) => `$${val}`}
+                      dx={-10}
+                    />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
+                      itemStyle={{ color: "hsl(var(--foreground))", fontWeight: "bold" }}
+                    />
+                    <Area 
+                      type="stepAfter" 
+                      dataKey="amount" 
+                      stroke="hsl(var(--primary))" 
+                      strokeWidth={2}
+                      fillOpacity={1} 
+                      fill="url(#colorSavings)" 
+                    />
+                  </AreaChart>
                 </ResponsiveContainer>
               )}
             </div>
-            <div className="w-full grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-[#22252d]">
-              {riskChartData.map((entry, index) => (
-                <div key={entry.name} className="flex flex-col items-center p-2 rounded bg-[#16191f]/50 border border-[#22252d]">
-                  <span className="text-[9px] text-slate-400 font-semibold">{entry.name}</span>
-                  <span className="text-xs font-bold font-mono text-white mt-1">${entry.value.toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
-      </div>
 
-      {/* Action Type Breakdown & Health Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Action Type Breakdown */}
-        <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl shadow-lg lg:col-span-2">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">Savings Breakdown by Action Type ($)</h3>
-          </div>
-          <div className="h-60">
-            {actionChartData.length === 0 ? (
-              <p className="text-xs text-slate-500 italic text-center py-20">No action metadata found.</p>
+        {/* Right Column: Health & Recent Activity */}
+        <div className="space-y-6">
+          {/* Latest Recommendation Insight */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h3 className="text-xs font-semibold text-foreground uppercase tracking-widest mb-4">Highest Priority Insight</h3>
+            {latestRecommendation ? (
+              <div className="space-y-3">
+                <div className="p-3 bg-muted/30 border border-border rounded-md">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="px-2 py-0.5 rounded border border-primary/20 bg-primary/10 text-primary text-[9px] uppercase font-bold tracking-wider">
+                      {latestRecommendation.action_type}
+                    </span>
+                    <span className="text-emerald-500 font-mono font-bold text-xs">${latestRecommendation.saving_amount.toFixed(2)}</span>
+                  </div>
+                  <p className="font-mono text-xs text-foreground truncate">{latestRecommendation.resource_id}</p>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">{latestRecommendation.rationale}</p>
+              </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={actionChartData}>
-                  <XAxis dataKey="name" stroke="#525866" fontSize={10} tickLine={false} />
-                  <YAxis stroke="#525866" fontSize={10} tickLine={false} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: "#111318", borderColor: "#22252d", borderRadius: "8px", fontSize: "11px" }}
-                  />
-                  <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]}>
-                    {actionChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <p className="text-[11px] text-muted-foreground italic">No recommendations identified yet.</p>
+            )}
+          </div>
+
+          {/* Estate Health */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h3 className="text-xs font-semibold text-foreground uppercase tracking-widest mb-4">Estate Summary</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Resources Tracked</span>
+                </div>
+                <span className="font-mono text-xs">{resources.length}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Network className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Network Guardrails</span>
+                </div>
+                <span className="font-mono text-xs text-emerald-500">Active</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Active Workflows Mini */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h3 className="text-xs font-semibold text-foreground uppercase tracking-widest mb-4">Recent Sweeps</h3>
+            {runs.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No sweeps executed.</p>
+            ) : (
+              <div className="space-y-3">
+                {runs.slice(0, 4).map((run) => (
+                  <div key={run.id} className="flex items-center justify-between p-2 rounded bg-muted/30 border border-border/50">
+                    <div className="flex items-center gap-2">
+                      {run.status === "running" ? (
+                        <RefreshCw className="h-3 w-3 text-primary animate-spin" />
+                      ) : run.status === "completed" ? (
+                        <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                      ) : run.status === "blocked_on_approval" ? (
+                        <Lock className="h-3 w-3 text-amber-500" />
+                      ) : (
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                      )}
+                      <span className="text-[10px] font-mono truncate w-24 text-foreground">{run.id.substring(0,8)}</span>
+                    </div>
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{run.status.replace(/_/g, " ")}</span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
 
-        {/* System Health Check Ledger */}
-        <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl shadow-lg flex flex-col justify-between">
-          <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200 mb-6">Autopilot Health Ledger</h3>
-            <div className="space-y-4">
-              {/* Azure RM API */}
-              <div className="flex items-center justify-between p-3 rounded-lg bg-[#16191f]/50 border border-[#22252d]">
-                <div className="flex items-center gap-2">
-                  <Database className="h-4 w-4 text-indigo-400" />
-                  <span className="text-xs font-bold text-slate-300">Azure RM API Client</span>
-                </div>
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase font-mono">Connected</span>
-              </div>
-
-              {/* SQLite DB */}
-              <div className="flex items-center justify-between p-3 rounded-lg bg-[#16191f]/50 border border-[#22252d]">
-                <div className="flex items-center gap-2">
-                  <Cpu className="h-4 w-4 text-purple-400" />
-                  <span className="text-xs font-bold text-slate-300">SQLite Database Engine</span>
-                </div>
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase font-mono">Synchronized</span>
-              </div>
-
-              {/* Event Bus */}
-              <div className="flex items-center justify-between p-3 rounded-lg bg-[#16191f]/50 border border-[#22252d]">
-                <div className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-pink-400" />
-                  <span className="text-xs font-bold text-slate-300">Event Bus Broadcast</span>
-                </div>
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase font-mono">Listening</span>
-              </div>
-
-              {/* JWT Signer */}
-              <div className="flex items-center justify-between p-3 rounded-lg bg-[#16191f]/50 border border-[#22252d]">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-cyan-400" />
-                  <span className="text-xs font-bold text-slate-300">HITL Gate Guardian</span>
-                </div>
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase font-mono">Armed</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono mt-4 pt-4 border-t border-[#22252d] leading-relaxed">
-            All system parameters operate within target security SLA levels.
-          </div>
-        </div>
       </div>
     </div>
   );

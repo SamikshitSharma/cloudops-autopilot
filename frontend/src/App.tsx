@@ -7,7 +7,6 @@ import { Topology } from "./views/Topology";
 import { Recommendations } from "./views/Recommendations";
 import { EventBus } from "./views/EventBus";
 import { Approvals } from "./views/Approvals";
-import { AuditLogs } from "./views/AuditLogs";
 import { useWorkflow } from "./hooks/useWorkflow";
 
 function App() {
@@ -44,6 +43,7 @@ function App() {
             resources={resources}
             recommendations={recommendations}
             approvals={approvals}
+            activeRunDetails={runDetails}
           />
         );
       case "inventory":
@@ -74,8 +74,6 @@ function App() {
             approve={approve}
           />
         );
-      case "audit":
-        return <AuditLogs runs={runsDetails} refresh={refresh} />;
       default:
         return (
           <Overview 
@@ -83,6 +81,7 @@ function App() {
             resources={resources}
             recommendations={recommendations}
             approvals={approvals}
+            activeRunDetails={runDetails}
           />
         );
     }

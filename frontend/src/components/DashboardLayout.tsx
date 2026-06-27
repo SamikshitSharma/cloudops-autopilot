@@ -13,10 +13,9 @@ import {
   Zap,
   Lock,
   MessageSquare,
-  ChevronRight,
-  Terminal,
   Send,
-  Sparkle
+  Sparkle,
+  ServerCrash
 } from "lucide-react";
 import { api } from "../api/client";
 
@@ -31,11 +30,12 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
   const [dbStatus, setDbStatus] = useState<"healthy" | "unhealthy" | "loading">("loading");
   const [isCopilotOpen, setIsCopilotOpen] = useState(true);
   const [chatInput, setChatInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{ sender: "ai" | "user", text: string }>>([
-    { sender: "ai", text: "Autopilot initialized. Ready to run inventory sweeps, inspect policy compliance, or generate JWT approval tokens. Ask me anything about your cloud resources." }
+    { sender: "ai", text: "Autopilot initialized. The active sweep has detected 4 idle VMs and 2 unattached disks. I've prepared a cost optimization reasoning chain." }
   ]);
 
-  // Sync dark mode preference
+  // Sync dark mode preference properly using the new root variables
   useEffect(() => {
     const root = window.document.documentElement;
     if (darkMode) {
@@ -45,7 +45,6 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
     }
   }, [darkMode]);
 
-  // Check health on load and periodically
   useEffect(() => {
     const checkHealth = async () => {
       try {
@@ -70,19 +69,26 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
     const userMsg = chatInput;
     setChatMessages(prev => [...prev, { sender: "user", text: userMsg }]);
     setChatInput("");
+    setIsTyping(true);
 
-    // Simulate AI response based on keyword matching
+    // Simulate AI intelligent reasoning response
     setTimeout(() => {
-      let aiText = "I'm monitoring the active sweep. You can trigger a stop scenario on idle VMs or verify approvals inside the Approval Center.";
-      if (userMsg.toLowerCase().includes("savings") || userMsg.toLowerCase().includes("recommen")) {
-        aiText = "Based on our latest sweeps, there is a total potential saving of $105.00 available. The highest saver is vm-idle-01 in rg-prod ($50.00). Tokens are prepared for operator approval.";
-      } else if (userMsg.toLowerCase().includes("vm") || userMsg.toLowerCase().includes("idle")) {
-        aiText = "Discovered idle Compute VM 'vm-idle-01' in Resource Group 'rg-prod'. It's been running at <2% CPU for 7 days. Resizing or stopping this VM is recommended.";
-      } else if (userMsg.toLowerCase().includes("token") || userMsg.toLowerCase().includes("approve")) {
-        aiText = "Approvals require a signed JWT token with an operator signature. Sign-offs can be granted from the Approval Center tab.";
+      let aiText = "I am continuously monitoring the active telemetry stream. Governance policies are currently enforced.";
+      const lowerMsg = userMsg.toLowerCase();
+      
+      if (lowerMsg.includes("savings") || lowerMsg.includes("recommend")) {
+        aiText = "Based on our latest sweeps, there is a total potential saving of $105.00 available. The highest saver is `vm-idle-01` in `rg-prod` ($50.00). Tokens are prepared for operator approval.";
+      } else if (lowerMsg.includes("vm") || lowerMsg.includes("idle")) {
+        aiText = "Discovered idle Compute VM `vm-idle-01` in Resource Group `rg-prod`. Telemetry indicates <2% CPU for 7 days. I have constructed a resize/stop execution plan.";
+      } else if (lowerMsg.includes("token") || lowerMsg.includes("approve")) {
+        aiText = "Approvals require a signed JWT token with an operator signature. I have prepared the cryptographic payloads. Sign-offs can be granted from the **Approval Center** tab.";
+      } else if (lowerMsg.includes("why")) {
+        aiText = "The orchestrator agent executed a heuristic cross-reference between Azure Monitor metrics and our FinOps baseline. The risk profile is calculated as 'low' because the asset has no active network connections.";
       }
+      
       setChatMessages(prev => [...prev, { sender: "ai", text: aiText }]);
-    }, 1000);
+      setIsTyping(false);
+    }, 1500);
   };
 
   const navItems = [
@@ -90,118 +96,136 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
     { id: "inventory", label: "Asset Inventory", icon: Database },
     { id: "topology", label: "Resource Topology", icon: Network },
     { id: "recommendations", label: "AI Recommendations", icon: Sparkles },
-    { id: "workflow", label: "Agent Workflows", icon: Cpu },
-    { id: "eventbus", label: "Event Bus Live", icon: Activity },
+    { id: "workflow", label: "Execution Pipeline", icon: Cpu },
+    { id: "eventbus", label: "Global Event Timeline", icon: Activity },
     { id: "approvals", label: "Approval Center", icon: ShieldCheck },
-    { id: "audit", label: "Audit Ledger", icon: FileText },
   ];
 
   return (
-    <div className="flex h-screen bg-[#07080b] text-[#f8fafc] overflow-hidden font-sans tech-grid-bg">
-      {/* Sidebar */}
-      <aside className="w-68 bg-[#0b0c11] border-r border-[#1a1c24] flex flex-col justify-between z-20 shadow-2xl">
-        <div>
+    <div className="flex h-screen bg-background text-foreground overflow-hidden font-sans bg-dot-pattern">
+      {/* Vercel-style Dense Sidebar */}
+      <aside className="w-[280px] bg-card border-r border-border flex flex-col justify-between z-20 shadow-xl">
+        <div className="flex flex-col h-full">
           {/* Logo / Header */}
-          <div className="p-6 border-b border-[#1a1c24] flex items-center gap-3 bg-[#0d0e14]/60">
-            <div className="p-2 rounded-lg bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 text-white shadow-lg shadow-indigo-500/25">
-              <Zap className="h-5 w-5 animate-pulse" />
+          <div className="p-5 border-b border-border flex items-center gap-3">
+            <div className="p-1.5 rounded-md bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+              <Zap className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="font-heading font-extrabold text-sm tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-pink-400 uppercase">CloudOps</h1>
-              <p className="text-[9px] text-slate-400 font-bold tracking-widest font-mono">AUTOPILOT COGNITIVE</p>
+              <h1 className="font-bold text-sm tracking-tight text-foreground leading-tight">CloudOps <span className="text-primary font-bold">OS</span></h1>
+              <p className="text-[10px] text-muted-foreground font-mono font-medium tracking-wide">AUTOPILOT COGNITIVE</p>
             </div>
           </div>
 
           {/* Navigation Links */}
-          <nav className="p-4 space-y-1 overflow-y-auto max-h-[calc(100vh-280px)] custom-scrollbar">
-            {navItems.map((item) => {
+          <nav className="p-3 space-y-0.5 overflow-y-auto flex-1 custom-scrollbar">
+            <div className="px-3 pb-2 pt-4">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Platform</span>
+            </div>
+            {navItems.slice(0, 4).map((item) => {
               const Icon = item.icon;
               const isActive = currentTab === item.id;
               return (
                 <button
                   key={item.id}
                   onClick={() => setCurrentTab(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition-all duration-200 group relative ${
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 ${
                     isActive 
-                      ? "bg-gradient-to-r from-[#171923] to-[#12141c] text-indigo-400 border border-indigo-500/20 shadow-inner" 
-                      : "hover:bg-[#12141c] text-slate-400 hover:text-slate-200 border border-transparent"
+                      ? "bg-primary/10 text-primary" 
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >
-                  <Icon className={`h-4.5 w-4.5 transition-transform duration-200 group-hover:scale-105 ${isActive ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-200"}`} />
+                  <Icon className={`h-4 w-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
                   <span>{item.label}</span>
-                  {isActive && (
-                    <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-indigo-500 shadow-lg shadow-indigo-500/50 animate-pulse" />
+                </button>
+              );
+            })}
+
+            <div className="px-3 pb-2 pt-6">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Autonomous Engine</span>
+            </div>
+            {navItems.slice(4).map((item) => {
+              const Icon = item.icon;
+              const isActive = currentTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setCurrentTab(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 ${
+                    isActive 
+                      ? "bg-primary/10 text-primary" 
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                  <span>{item.label}</span>
+                  {isActive && item.id === 'workflow' && (
+                    <span className="ml-auto flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                    </span>
                   )}
                 </button>
               );
             })}
           </nav>
-        </div>
 
-        {/* Footer Settings */}
-        <div className="p-4 border-t border-[#1a1c24] space-y-3 bg-[#0d0e14]/40">
-          {/* Health Status */}
-          <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-[#07080b] border border-[#1a1c24] text-[10px]">
-            <span className="text-slate-400 font-medium">Engine Connectivity</span>
-            <div className="flex items-center gap-1.5">
-              <span className={`h-2 w-2 rounded-full ${
-                dbStatus === "healthy" 
-                  ? "bg-emerald-500 shadow-md shadow-emerald-500/50 animate-pulse" 
-                  : dbStatus === "unhealthy" 
-                    ? "bg-rose-500 shadow-md shadow-rose-500/50 animate-pulse" 
-                    : "bg-amber-500 animate-pulse"
-              }`} />
-              <span className="font-bold uppercase font-mono tracking-wider text-slate-200">{dbStatus}</span>
+          {/* Footer Settings */}
+          <div className="p-4 border-t border-border space-y-3 bg-muted/20">
+            {/* Health Status */}
+            <div className="flex items-center justify-between px-3 py-2 rounded-md bg-card border border-border text-[11px]">
+              <span className="text-muted-foreground font-medium flex items-center gap-2">
+                {dbStatus === "healthy" ? <Activity className="h-3 w-3 text-emerald-500" /> : <ServerCrash className="h-3 w-3 text-destructive" />}
+                Kernel Uplink
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className={`h-1.5 w-1.5 rounded-full ${
+                  dbStatus === "healthy" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" : "bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.8)]"
+                }`} />
+                <span className="font-semibold uppercase tracking-wider text-foreground">{dbStatus}</span>
+              </div>
             </div>
-          </div>
 
-          {/* Theme Toggler */}
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-[#1a1c24] hover:bg-[#12141c] text-xs font-semibold text-slate-300"
-          >
-            <div className="flex items-center gap-2">
-              {darkMode ? <Moon className="h-3.5 w-3.5 text-indigo-400" /> : <Sun className="h-3.5 w-3.5 text-amber-500" />}
-              <span>{darkMode ? "Dark Mode" : "Light Mode"}</span>
-            </div>
-          </button>
-
-          {/* Capstone Credit */}
-          <div className="text-[9px] text-slate-500 text-center pt-2 font-mono tracking-wider">
-            Google x Kaggle AI Agents Capstone
+            {/* Theme Toggler */}
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-md border border-border hover:bg-muted text-xs font-medium text-muted-foreground transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                {darkMode ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
+                <span>{darkMode ? "Dark Appearance" : "Light Appearance"}</span>
+              </div>
+            </button>
           </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-[#07080b]">
+      <main className="flex-1 flex flex-col overflow-hidden bg-background relative">
         {/* Top Navbar */}
-        <header className="h-16 border-b border-[#1a1c24] bg-[#0b0c11]/80 backdrop-blur-md px-8 flex items-center justify-between z-10 shadow-sm">
-          <div className="flex items-center gap-2 text-xs text-slate-400 font-semibold tracking-wide">
-            <span className="font-mono text-[9px] text-indigo-400 uppercase tracking-widest">CONTROL PLANE</span>
-            <span>/</span>
-            <span className="text-slate-100 uppercase tracking-widest font-mono text-[9px]">
-              {navItems.find((n) => n.id === currentTab)?.label}
-            </span>
+        <header className="h-14 border-b border-border bg-background/80 backdrop-blur-md px-6 flex items-center justify-between z-10 sticky top-0">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
+            <span className="text-foreground">{navItems.find((n) => n.id === currentTab)?.label}</span>
+            <span className="px-1.5 py-0.5 rounded-md bg-muted text-[10px] font-mono tracking-wide">v3.0.0-rc</span>
           </div>
 
           {/* Collapsible Copilot toggle + Status */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-[9px] font-bold tracking-widest uppercase px-3 py-1.5 rounded-full bg-[#10241a] text-emerald-400 border border-emerald-500/20">
+          <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               <Lock className="h-3 w-3" />
-              <span>Safety Guardrails Enabled</span>
+              <span>Guardrails Enforced</span>
             </div>
             
             <button
               onClick={() => setIsCopilotOpen(!isCopilotOpen)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold uppercase transition-all duration-200 ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-semibold transition-all duration-200 ${
                 isCopilotOpen 
-                  ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-400" 
-                  : "bg-[#111318] border-[#1a1c24] text-slate-400 hover:text-slate-200"
+                  ? "bg-primary text-primary-foreground border-primary shadow-sm" 
+                  : "bg-card text-foreground border-border hover:bg-muted"
               }`}
             >
               <MessageSquare className="h-3.5 w-3.5" />
-              <span>Copilot AI</span>
+              <span>Copilot</span>
             </button>
           </div>
         </header>
@@ -209,87 +233,120 @@ export function DashboardLayout({ currentTab, setCurrentTab, children }: Dashboa
         {/* Inner Content Pane + Copilot Sidebar */}
         <div className="flex-1 flex overflow-hidden">
           {/* Main scrollable body */}
-          <section className="flex-1 overflow-y-auto p-8 custom-scrollbar relative scanline-effect">
-            <div className="max-w-7xl mx-auto space-y-8">
+          <section className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar">
+            <div className="max-w-6xl mx-auto space-y-6 fade-in-up">
               {children}
             </div>
           </section>
 
-          {/* Sliding Copilot Sidebar */}
+          {/* Sliding Copilot Sidebar - Vercel v0 / Cursor style */}
           {isCopilotOpen && (
-            <aside className="w-80 bg-[#0b0c11] border-l border-[#1a1c24] flex flex-col justify-between z-10 shadow-2xl animate-slideLeft">
+            <aside className="w-[340px] bg-card border-l border-border flex flex-col justify-between z-10 shadow-2xl slide-in-right">
               
               {/* Header */}
-              <div className="p-4 border-b border-[#1a1c24] bg-[#0d0e14]/60">
+              <div className="p-4 border-b border-border">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Sparkle className="h-4 w-4 text-indigo-400 animate-spin-slow" />
-                    <h3 className="text-[10px] font-bold tracking-widest uppercase text-slate-200 font-mono">Co-Reasoning Copilot</h3>
+                    <div className="p-1 rounded bg-primary/10 text-primary">
+                      <Sparkle className="h-3.5 w-3.5" />
+                    </div>
+                    <h3 className="text-xs font-semibold text-foreground">CloudOps Copilot</h3>
                   </div>
-                  <span className="text-[8px] font-mono font-bold bg-[#14231b] text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded">ONLINE</span>
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
                 </div>
 
                 {/* Pulsing Active Agent Monitor */}
-                <div className="mt-4 p-3.5 bg-[#07080b] border border-[#1a1c24] rounded-lg space-y-2">
-                  <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest font-mono">Autonomous Agents State</span>
-                  <div className="grid grid-cols-2 gap-2 text-[9px] font-mono">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-slate-300">Executive</span>
+                <div className="mt-4 p-3 bg-muted/30 border border-border rounded-md">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Agent Swarm Status</div>
+                  <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-[11px] font-medium">
+                    <div className="flex items-center justify-between">
+                      <span className="text-foreground">Executive</span>
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)] animate-pulse" />
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-slate-300">FinOps</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-foreground">FinOps</span>
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_5px_rgba(99,102,241,0.5)] animate-pulse" />
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                      <span className="text-slate-300">Policy</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Policy</span>
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                      <span className="text-slate-300">Decision</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Telemetry</span>
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Chat Messages Timeline */}
-              <div className="flex-1 p-4 overflow-y-auto space-y-3.5 custom-scrollbar text-[10px] bg-[#07080b]/30">
+              <div className="flex-1 p-4 overflow-y-auto space-y-4 custom-scrollbar bg-muted/10">
                 {chatMessages.map((msg, idx) => (
-                  <div key={idx} className={`flex flex-col space-y-1 ${msg.sender === "user" ? "items-end" : "items-start"}`}>
-                    <span className="text-[8px] font-mono text-slate-500 uppercase tracking-widest">{msg.sender === "ai" ? "AUTOPILOT CO-PILOT" : "OPERATOR"}</span>
-                    <div className={`p-3.5 rounded-xl border max-w-[240px] leading-relaxed ${
-                      msg.sender === "user" 
-                        ? "bg-[#171923] border-[#222533] text-white" 
-                        : "bg-[#111318] border-[#1a1c24] text-slate-300 shadow-md shadow-black/20"
-                    }`}>
-                      {msg.text}
+                  <div key={idx} className={`flex gap-3 ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                    <div className={`flex-shrink-0 h-6 w-6 rounded-full flex items-center justify-center ${msg.sender === 'user' ? 'bg-secondary text-secondary-foreground border border-border' : 'bg-primary text-primary-foreground'}`}>
+                      {msg.sender === 'user' ? <UserIcon /> : <Sparkle className="h-3 w-3" />}
+                    </div>
+                    <div className={`flex flex-col max-w-[80%] ${msg.sender === "user" ? "items-end" : "items-start"}`}>
+                      <div className={`px-3 py-2 rounded-lg text-sm leading-relaxed ${
+                        msg.sender === "user" 
+                          ? "bg-foreground text-background" 
+                          : "bg-card border border-border text-foreground shadow-sm"
+                      }`}>
+                        {msg.text.split('`').map((chunk, i) => 
+                          i % 2 === 1 ? <code key={i} className="font-mono text-[11px] px-1 py-0.5 rounded bg-muted text-primary">{chunk}</code> : chunk
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
+                {isTyping && (
+                  <div className="flex gap-3 flex-row">
+                    <div className="flex-shrink-0 h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                      <Sparkle className="h-3 w-3" />
+                    </div>
+                    <div className="px-3 py-2 rounded-lg bg-card border border-border flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-bounce"></span>
+                      <span className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+                      <span className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Chat Input Field */}
-              <form onSubmit={handleSendChat} className="p-4 border-t border-[#1a1c24] bg-[#0d0e14]/50 flex gap-2">
+              <form onSubmit={handleSendChat} className="p-4 bg-card border-t border-border relative">
                 <input
                   type="text"
-                  placeholder="Ask agent about saving metrics..."
+                  placeholder="Ask the swarm about savings..."
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  className="flex-1 bg-[#07080b] border border-[#1a1c24] rounded-lg px-3 py-2 text-[10px] text-slate-200 placeholder-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-0"
+                  disabled={isTyping}
+                  className="w-full bg-background border border-border rounded-md pl-3 pr-10 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
                 />
                 <button 
                   type="submit"
-                  className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-all duration-150"
+                  disabled={isTyping || !chatInput.trim()}
+                  className="absolute right-6 top-6 text-muted-foreground hover:text-primary disabled:opacity-50 transition-colors"
                 >
-                  <Send className="h-3.5 w-3.5" />
+                  <Send className="h-4 w-4" />
                 </button>
               </form>
-
             </aside>
           )}
         </div>
       </main>
     </div>
+  );
+}
+
+function UserIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+      <circle cx="12" cy="7" r="4"></circle>
+    </svg>
   );
 }

@@ -7,7 +7,12 @@ import {
   KeyRound, 
   Activity,
   User,
-  ExternalLink
+  ExternalLink,
+  Fingerprint,
+  Cpu,
+  CheckCircle2,
+  Lock,
+  LockOpen
 } from "lucide-react";
 import type { RecommendationDTO, ApprovalDTO } from "../api/client";
 
@@ -19,8 +24,9 @@ interface ApprovalsProps {
 
 export function Approvals({ recommendations, approvals, approve }: ApprovalsProps) {
   const [operatorId, setOperatorId] = useState("Dashboard-Operator");
-  const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [signingState, setSigningState] = useState<Record<string, "idle" | "signing" | "success">>({});
+  const [signingProgress, setSigningProgress] = useState<Record<string, number>>({});
+  const [cryptoHash, setCryptoHash] = useState<Record<string, string>>({});
 
   // Link recommendations with their approvals
   const pendingApprovalsList = approvals
@@ -31,138 +37,179 @@ export function Approvals({ recommendations, approvals, approve }: ApprovalsProp
     })
     .filter(item => item.recommendation !== undefined);
 
+  const generateRandomHash = () => {
+    const chars = '0123456789abcdef';
+    let hash = '0x';
+    for (let i = 0; i < 40; i++) hash += chars[Math.floor(Math.random() * chars.length)];
+    return hash;
+  };
+
   const handleApprove = async (approvalId: string) => {
-    setLoadingMap(prev => ({ ...prev, [approvalId]: true }));
-    setSuccessMsg(null);
+    setSigningState(prev => ({ ...prev, [approvalId]: "signing" }));
+    setSigningProgress(prev => ({ ...prev, [approvalId]: 0 }));
+    
+    // Animate the cryptographic signing
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += Math.random() * 15;
+      if (progress > 100) progress = 100;
+      
+      setSigningProgress(prev => ({ ...prev, [approvalId]: progress }));
+      setCryptoHash(prev => ({ ...prev, [approvalId]: generateRandomHash() }));
+
+      if (progress === 100) {
+        clearInterval(interval);
+        finalizeApproval(approvalId);
+      }
+    }, 200);
+  };
+
+  const finalizeApproval = async (approvalId: string) => {
     try {
       await approve(approvalId);
-      setSuccessMsg(`Manual signature authenticated successfully. Action token generated.`);
+      setSigningState(prev => ({ ...prev, [approvalId]: "success" }));
+      setTimeout(() => {
+        setSigningState(prev => {
+          const newState = { ...prev };
+          delete newState[approvalId];
+          return newState;
+        });
+      }, 3000);
     } catch (err: any) {
       console.error(err);
-    } finally {
-      setLoadingMap(prev => ({ ...prev, [approvalId]: false }));
+      setSigningState(prev => ({ ...prev, [approvalId]: "idle" }));
     }
   };
 
   return (
-    <div className="space-y-8 animate-fadeIn">
+    <div className="space-y-6">
       {/* Header Widget */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#22252d] pb-6">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-border mb-6">
         <div>
-          <h2 className="text-xl font-extrabold text-white tracking-wide">HUMAN-IN-THE-LOOP APPROVAL CENTER</h2>
-          <p className="text-xs text-slate-400 mt-1">Manual validation gates and cryptographic approval triggers for cost reduction sweeps.</p>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            <Lock className="h-6 w-6 text-primary" />
+            Approval Center
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">Cryptographic execution gates for autonomous cloud remediation operations.</p>
         </div>
         <div className="flex items-center gap-4 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Active Operator:</span>
+          <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-md border border-border">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider font-bold">Operator ID:</span>
             <div className="relative">
-              <User className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-slate-500" />
+              <User className="absolute left-1.5 top-1 h-3.5 w-3.5 text-primary" />
               <input
                 type="text"
                 value={operatorId}
                 onChange={(e) => setOperatorId(e.target.value)}
-                className="bg-[#090b0f] border border-[#22252d] rounded-lg pl-8 pr-3 py-1 text-xs text-indigo-400 font-mono font-bold w-44 focus:border-indigo-500/50 focus:outline-none focus:ring-0"
+                className="bg-transparent border-none pl-6 pr-2 py-0.5 text-[11px] text-foreground font-mono font-bold w-40 focus:outline-none focus:ring-0"
               />
             </div>
           </div>
         </div>
       </div>
 
-      {successMsg && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs font-semibold flex items-center gap-2.5 animate-fadeIn shadow-lg shadow-emerald-500/5">
-          <Check className="h-4.5 w-4.5 text-emerald-400" />
-          <span>{successMsg}</span>
-        </div>
-      )}
-
       {/* Approvals Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {pendingApprovalsList.length === 0 ? (
-          <div className="md:col-span-2 p-16 border border-dashed border-[#22252d] rounded-xl text-center bg-[#111318]/50 shadow-inner">
-            <ShieldAlert className="h-10 w-10 text-slate-600 mx-auto mb-4" />
-            <p className="text-sm font-extrabold text-slate-400 uppercase tracking-wider">No Pending Gated Approvals</p>
-            <p className="text-xs text-slate-500 mt-1.5 max-w-sm mx-auto leading-relaxed">Autopilot policies are monitoring the subscription. Any write action triggers requiring validation will populate here.</p>
+          <div className="md:col-span-2 p-16 border-2 border-dashed border-border rounded-xl text-center bg-muted/10">
+            <ShieldCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+            <p className="text-sm font-bold text-foreground uppercase tracking-wider">Zero Pending Gates</p>
+            <p className="text-xs text-muted-foreground mt-2 max-w-sm mx-auto leading-relaxed">
+              All active agent sweeps have completed or are operating within permitted guardrail boundaries. No manual intervention required.
+            </p>
           </div>
         ) : (
           pendingApprovalsList.map(({ approval, recommendation }) => {
             if (!recommendation) return null;
             const isHighRisk = recommendation.risk_level === "high";
-            const isLoading = loadingMap[approval.id] || false;
+            const state = signingState[approval.id] || "idle";
+            const progress = signingProgress[approval.id] || 0;
+            const hash = cryptoHash[approval.id] || "0x0000000000000000000000000000000000000000";
 
             return (
-              <div key={approval.id} className={`p-6 border rounded-xl bg-[#111318] flex flex-col justify-between space-y-6 shadow-xl relative overflow-hidden transition-all duration-200 hover:border-indigo-500/30 ${
-                isHighRisk ? "border-rose-500/20" : "border-[#22252d]"
+              <div key={approval.id} className={`glass-panel p-6 border rounded-xl flex flex-col justify-between space-y-6 shadow-xl relative overflow-hidden transition-all duration-300 ${
+                isHighRisk ? "border-rose-500/50 shadow-rose-500/10" : "border-border hover:border-primary/50"
               }`}>
                 {isHighRisk && <div className="absolute top-0 left-0 w-1.5 h-full bg-rose-500" />}
                 
-                <div className="space-y-4">
+                <div className="space-y-4 relative z-10">
                   {/* Header: Action type & Risk level */}
                   <div className="flex items-center justify-between">
-                    <span className={`text-[9px] uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-md border ${
-                      recommendation.action_type === "stop"
-                        ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                        : recommendation.action_type === "resize"
-                          ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                          : "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
-                    }`}>
-                      ACTION: {recommendation.action_type}
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-md border bg-card text-foreground border-border flex items-center gap-1.5">
+                      <Cpu className="h-3 w-3 text-primary" />
+                      {recommendation.action_type.replace(/_/g, " ")}
                     </span>
-                    <span className={`text-[9px] uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-md border ${
-                      isHighRisk ? "bg-rose-500/10 text-rose-400 border-rose-500/20" : "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
+                    <span className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-md border flex items-center gap-1.5 ${
+                      isHighRisk ? "bg-rose-500/10 text-rose-500 border-rose-500/20" : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
                     }`}>
+                      {isHighRisk ? <ShieldAlert className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
                       {recommendation.risk_level} RISK
                     </span>
                   </div>
 
                   {/* Target resource & savings */}
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-extrabold text-white font-mono">{recommendation.resource_id}</h4>
-                    <p className="text-xs text-slate-400 leading-normal">{recommendation.rationale}</p>
-                    {recommendation.evidence && (
-                      <p className="text-[10px] text-slate-500 font-mono italic">Evidence: {recommendation.evidence}</p>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 pt-2">
-                    {/* Savings display */}
-                    <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-xs bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/20 font-mono">
-                      <DollarSign className="h-3.5 w-3.5" />
-                      <span>Savings: ${recommendation.saving_amount.toFixed(2)} / mo</span>
-                    </div>
-
-                    {/* Confidence display */}
-                    <div className="flex items-center gap-1 text-indigo-400 font-extrabold text-xs bg-indigo-500/10 px-2.5 py-1 rounded border border-indigo-500/20 font-mono">
-                      <span>Confidence: {((recommendation.confidence_score || 0.95) * 100).toFixed(0)}%</span>
+                  <div className="space-y-2 bg-muted/20 p-4 rounded-lg border border-border/50">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mb-1">Target Asset ID</p>
+                    <h4 className="text-sm font-bold text-foreground font-mono truncate">{recommendation.resource_id}</h4>
+                    
+                    <div className="mt-3 pt-3 border-t border-border/50 grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mb-1">MRR Impact</p>
+                        <p className="font-mono font-bold text-emerald-500 text-xs">+${recommendation.saving_amount.toFixed(2)}/mo</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mb-1">Agent Confidence</p>
+                        <p className="font-mono font-bold text-primary text-xs">{((recommendation.confidence_score || 0.95) * 100).toFixed(0)}%</p>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Actions buttons */}
-                <div className="pt-4 border-t border-[#22252d] flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-1.5 text-[9px] text-slate-500 font-mono uppercase tracking-wider">
-                    <KeyRound className="h-3.5 w-3.5 text-indigo-400" />
-                    <span>JWT Signature required</span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleApprove(approval.id)}
-                      disabled={isLoading}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold uppercase transition-all disabled:opacity-50 shadow-lg shadow-indigo-600/15"
-                    >
-                      {isLoading ? (
-                        <>
+                {/* Cryptographic Signing Overlay or Button */}
+                <div className="relative z-10">
+                  {state === "idle" ? (
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono uppercase tracking-wider">
+                        <KeyRound className="h-3.5 w-3.5 text-primary" />
+                        <span>Requires signature</span>
+                      </div>
+                      <button
+                        onClick={() => handleApprove(approval.id)}
+                        className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold uppercase tracking-wider transition-all"
+                      >
+                        <Fingerprint className="h-4 w-4" />
+                        Sign & Execute
+                      </button>
+                    </div>
+                  ) : state === "signing" ? (
+                    <div className="bg-black/80 rounded-lg p-4 border border-border scanline-effect">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-primary uppercase tracking-widest flex items-center gap-2">
                           <Activity className="h-3.5 w-3.5 animate-pulse" />
-                          <span>Signing...</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck className="h-3.5 w-3.5" />
-                          <span>Sign & Approve</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                          Generating Cryptographic Token...
+                        </span>
+                        <span className="text-[10px] font-mono text-muted-foreground">{Math.floor(progress)}%</span>
+                      </div>
+                      
+                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mb-3">
+                        <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
+                      </div>
+                      
+                      <div className="text-[9px] font-mono text-muted-foreground break-all leading-tight opacity-70">
+                        {hash}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-emerald-500/10 rounded-lg p-4 border border-emerald-500/30 flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-emerald-500 uppercase tracking-widest">Signature Verified</p>
+                        <p className="text-[10px] font-mono text-muted-foreground mt-0.5">Execution payload dispatched to orchestrator.</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             );

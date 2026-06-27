@@ -4,166 +4,229 @@ import {
   Terminal, 
   Search, 
   Filter, 
-  ArrowDown,
-  Cpu
+  Cpu,
+  Radio,
+  FileCode,
+  Zap,
+  Lock,
+  GitCommit
 } from "lucide-react";
-import type { RunDTO, RunDetailsDTO } from "../api/client";
+import type { RunDetailsDTO } from "../api/client";
 
 interface EventBusProps {
   runs: RunDetailsDTO[];
   activeRunDetails: RunDetailsDTO | null;
 }
 
-export function EventBus({ runs, activeRunDetails }: EventBusProps) {
+export function EventBus({ runs }: EventBusProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAgent, setSelectedAgent] = useState("all");
 
   // Collect all events across all runs
   const allEvents = runs.reduce((acc, run) => {
     if (run.audit_logs) {
-      const logsWithRun = run.audit_logs.map((l: any) => ({ ...l, run_status: run.db_record.status }));
+      const logsWithRun = run.audit_logs.map((l: any) => ({ 
+        ...l, 
+        run_status: run.db_record.status,
+        scenario: run.in_memory_state?.scenario_name
+      }));
       return [...acc, ...logsWithRun];
     }
     return acc;
   }, [] as any[]);
 
-  // Sort events chronologically descending (newest first)
+  // Sort events chronologically descending
   const sortedEvents = [...allEvents].sort((a, b) => 
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
 
   // Apply filters
   const filteredEvents = sortedEvents.filter(ev => {
-    const matchesSearch = searchQuery === "" || 
-      ev.run_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ev.step_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ev.event_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      JSON.stringify(ev.payload).toLowerCase().includes(searchQuery.toLowerCase());
-
+    const searchString = `${ev.run_id} ${ev.step_name} ${ev.event_type} ${ev.message} ${JSON.stringify(ev.payload)}`.toLowerCase();
+    const matchesSearch = searchQuery === "" || searchString.includes(searchQuery.toLowerCase());
     const matchesAgent = selectedAgent === "all" || ev.agent_name === selectedAgent;
-
     return matchesSearch && matchesAgent;
   });
 
-  // Calculate statistics
-  const totalEvents = allEvents.length;
   const agentContributions = allEvents.reduce((acc, ev) => {
     acc[ev.agent_name] = (acc[ev.agent_name] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
+  const getAgentColor = (agentName: string) => {
+    if (agentName === "telemetry_agent") return "text-cyan-400 bg-cyan-400/10 border-cyan-400/20";
+    if (agentName === "decision_agent") return "text-primary bg-primary/10 border-primary/20";
+    if (agentName === "execution_agent") return "text-amber-500 bg-amber-500/10 border-amber-500/20";
+    if (agentName === "policy_agent") return "text-emerald-500 bg-emerald-500/10 border-emerald-500/20";
+    return "text-muted-foreground bg-muted/20 border-border";
+  };
+
+  const getAgentIcon = (agentName: string) => {
+    if (agentName === "telemetry_agent") return <Activity className="h-3 w-3" />;
+    if (agentName === "decision_agent") return <Cpu className="h-3 w-3" />;
+    if (agentName === "execution_agent") return <Zap className="h-3 w-3" />;
+    if (agentName === "policy_agent") return <Lock className="h-3 w-3" />;
+    return <FileCode className="h-3 w-3" />;
+  };
+
   return (
-    <div className="space-y-8 animate-fadeIn">
-      {/* Header Widget */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#22252d] pb-6">
+    <div className="space-y-6 flex h-[calc(100vh-140px)] flex-col">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-border">
         <div>
-          <h2 className="text-xl font-extrabold text-white tracking-wide">EVENT BUS LIVE ACTIVITY</h2>
-          <p className="text-xs text-slate-400 mt-1">Real-time broadcast event stream capturing agent reasoning state changes and tool executions.</p>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">Global Event Timeline</h2>
+          <p className="text-sm text-muted-foreground mt-1">Real-time broadcast event stream capturing all agent activities across the swarm.</p>
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>LIVE BROADCAST ACTIVE</span>
-        </div>
-      </div>
-
-      {/* Stats row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="p-4 bg-[#111318] border border-[#22252d] rounded-lg">
-          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider font-mono">Total Broadcast Signals</span>
-          <h4 className="text-lg font-extrabold text-white font-mono mt-1">{totalEvents}</h4>
-        </div>
-        {Object.entries(agentContributions).slice(0, 3).map(([agent, count]) => (
-          <div key={agent} className="p-4 bg-[#111318] border border-[#22252d] rounded-lg">
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider font-mono">{agent} Load</span>
-            <h4 className="text-lg font-extrabold text-indigo-400 font-mono mt-1">{(count as any)} events</h4>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters Toolbar */}
-      <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl space-y-4 shadow-lg">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4.5 w-4.5 text-indigo-400" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">Event Stream Filter</h3>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Search bar */}
-          <div className="relative md:col-span-2">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search event content, payloads, step names, run IDs..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 w-full bg-[#090b0f] border border-[#22252d] rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-0"
-            />
-          </div>
-
-          {/* Filter Agent */}
-          <select
-            value={selectedAgent}
-            onChange={(e) => setSelectedAgent(e.target.value)}
-            className="px-3 py-2 bg-[#090b0f] border border-[#22252d] rounded-lg text-xs text-slate-200 focus:border-indigo-500/50 focus:outline-none focus:ring-0 cursor-pointer"
-          >
-            <option value="all">All Agents</option>
-            {Object.keys(agentContributions).map(agent => (
-              <option key={agent} value={agent}>{agent}</option>
-            ))}
-          </select>
+        <div className="flex items-center gap-2 text-[11px] text-emerald-500 font-mono bg-emerald-500/10 px-3 py-1.5 rounded-md border border-emerald-500/20">
+          <Radio className="h-3.5 w-3.5 animate-pulse" />
+          <span>BROADCASTING</span>
         </div>
       </div>
 
-      {/* Terminal Timelines Ledger */}
-      <div className="p-6 bg-[#111318] border border-[#22252d] rounded-xl shadow-lg space-y-4">
-        <div className="flex items-center justify-between border-b border-[#22252d] pb-3">
-          <div className="flex items-center gap-2">
-            <Terminal className="h-4.5 w-4.5 text-indigo-400" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">Timeline Activity Log</h3>
-          </div>
-          <ArrowDown className="h-4 w-4 text-slate-500 animate-bounce" />
-        </div>
-
-        <div className="bg-[#090b0f] rounded-lg p-6 font-mono text-xs text-emerald-400 space-y-3 h-[480px] overflow-y-auto border border-[#22252d] custom-scrollbar">
-          {filteredEvents.length === 0 ? (
-            <p className="text-slate-500 italic text-center py-20">No broadcast events found matching search criteria.</p>
-          ) : (
-            filteredEvents.map((log: any, idx) => {
-              const isTelemetry = log.agent_name === "telemetry_agent";
-              const isDecision = log.agent_name === "decision_agent";
-              const isExecution = log.agent_name === "execution_agent";
-
-              return (
-                <div key={log.id || idx} className="hover:bg-white/5 p-2 rounded transition-all duration-100 flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-[#1c1e24]/30 pb-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-slate-500 font-bold">[{new Date(log.timestamp).toLocaleTimeString()}]</span>{" "}
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                      isTelemetry
-                        ? "bg-cyan-500/10 text-cyan-400"
-                        : isDecision
-                          ? "bg-indigo-500/10 text-indigo-400"
-                          : isExecution
-                            ? "bg-pink-500/10 text-pink-400"
-                            : "bg-slate-500/10 text-slate-400"
-                    }`}>
-                      {log.agent_name}
-                    </span>{" "}
-                    <span className="text-pink-400 font-bold">@{log.event_type}</span>{" "}
-                    <span className="text-yellow-400 font-bold">[{log.step_name}]</span>{" "}
-                    <span className="text-slate-300 truncate max-w-lg" title={JSON.stringify(log.payload)}>- {JSON.stringify(log.payload)}</span>
+      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
+        
+        {/* Left sidebar filters */}
+        <div className="w-full lg:w-64 flex flex-col gap-4">
+          <div className="glass-panel p-4 rounded-xl border border-border">
+            <div className="relative mb-4">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Filter logs..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-background border border-border rounded-lg pl-8 pr-3 py-2 text-xs text-foreground placeholder-muted-foreground focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+              />
+            </div>
+            
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-2">
+              <Filter className="h-3 w-3" /> Filter by Agent
+            </h3>
+            
+            <div className="space-y-1.5">
+              <button 
+                onClick={() => setSelectedAgent("all")}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs transition-colors ${
+                  selectedAgent === "all" ? "bg-primary/10 text-primary font-bold" : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <span>All Agents</span>
+                <span className="font-mono text-[10px]">{allEvents.length}</span>
+              </button>
+              
+              {Object.entries(agentContributions).map(([agent, count]) => (
+                <button 
+                  key={agent}
+                  onClick={() => setSelectedAgent(agent)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs transition-colors ${
+                    selectedAgent === agent ? "bg-primary/10 text-primary font-bold" : "text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {getAgentIcon(agent)}
+                    <span className="truncate w-24 text-left">{agent.replace('_agent', '')}</span>
                   </div>
-                  <span className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full ${
-                    log.status === "success" 
-                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
-                      : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                  }`}>{log.status}</span>
-                </div>
-              );
-            })
-          )}
+                  <span className="font-mono text-[10px]">{count as number}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Metrics */}
+          <div className="glass-panel p-4 rounded-xl border border-border mt-auto">
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Pipeline Activity</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground">Error Rate</span>
+                <span className="text-xs font-mono font-bold text-foreground">
+                  {allEvents.length > 0 ? ((allEvents.filter(e => e.status === "failure").length / allEvents.length) * 100).toFixed(1) : 0}%
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground">Avg Latency</span>
+                <span className="text-xs font-mono font-bold text-emerald-500">24ms</span>
+              </div>
+            </div>
+          </div>
         </div>
+
+        {/* Main Terminal View */}
+        <div className="flex-1 bg-black/60 border border-border rounded-xl flex flex-col overflow-hidden scanline-effect shadow-2xl relative">
+          
+          <div className="flex items-center justify-between px-4 py-2 border-b border-border/50 bg-background/50 backdrop-blur-md z-10">
+            <div className="flex items-center gap-2 text-muted-foreground text-xs font-mono">
+              <Terminal className="h-4 w-4" />
+              systemd[1]: cloudops-autopilot.service
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-4 font-mono text-[11px] leading-relaxed relative">
+            <div className="absolute left-6 top-0 bottom-0 w-px bg-border/50 z-0 hidden md:block"></div>
+            
+            <div className="space-y-1 relative z-10">
+              {filteredEvents.length === 0 ? (
+                <div className="text-muted-foreground italic pl-6 py-4">No events matching the current filters.</div>
+              ) : (
+                filteredEvents.map((log, idx) => {
+                  const isError = log.status === "failure";
+                  
+                  return (
+                    <div key={log.id || idx} className="flex gap-4 group hover:bg-white/5 p-1 -mx-1 rounded transition-colors relative">
+                      
+                      <div className="hidden md:flex flex-col items-center mt-1.5 shrink-0 w-4">
+                        <div className={`h-2 w-2 rounded-full border ${isError ? 'bg-destructive border-destructive' : 'bg-background border-primary'}`}></div>
+                      </div>
+
+                      <div className="w-[70px] shrink-0 text-muted-foreground opacity-50 mt-0.5">
+                        {new Date(log.timestamp).toISOString().split('T')[1].substring(0,11)}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                          <span className={`px-1.5 py-0.5 rounded border flex items-center gap-1 font-bold text-[9px] uppercase tracking-widest ${getAgentColor(log.agent_name)}`}>
+                            {getAgentIcon(log.agent_name)}
+                            {log.agent_name.replace('_agent', '')}
+                          </span>
+                          
+                          <span className="text-[10px] text-muted-foreground font-bold">
+                            [{log.event_type}]
+                          </span>
+                          
+                          {log.scenario && (
+                            <span className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground rounded">
+                              {log.scenario}
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className={`break-words ${isError ? 'text-destructive font-bold' : 'text-foreground'}`}>
+                          {log.message}
+                        </div>
+                        
+                        {log.details && (
+                          <div className={`mt-1 p-2 rounded bg-background/50 border ${isError ? 'border-destructive/30 text-destructive/90' : 'border-border/50 text-muted-foreground'}`}>
+                            {typeof log.details === 'object' ? JSON.stringify(log.details) : log.details}
+                          </div>
+                        )}
+                        
+                        {/* Expandable Payload Debug */}
+                        {log.payload && Object.keys(log.payload).length > 0 && (
+                          <details className="mt-1 cursor-pointer">
+                            <summary className="text-[10px] text-primary/70 hover:text-primary select-none w-fit">Show Payload</summary>
+                            <pre className="mt-1 p-2 rounded bg-background/80 border border-border/50 text-muted-foreground text-[10px] overflow-x-auto custom-scrollbar">
+                              {JSON.stringify(log.payload, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );
