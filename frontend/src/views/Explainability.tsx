@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { HelpCircle, Shield, Award, Terminal, Cpu } from "lucide-react";
 import type { RecommendationDTO } from "../api/client";
 
 interface ExplainabilityProps {
@@ -13,41 +12,6 @@ export function Explainability({ recommendations }: ExplainabilityProps) {
 
   const selectedReco = recommendations.find(r => r.id === selectedRecoId);
 
-  // Generate a mock detailed trace based on recommendation properties
-  const generateMockTrace = (reco: RecommendationDTO) => {
-    const isVm = reco.resource_id.includes("vm");
-    
-    return {
-      agentGroup: isVm ? "Compute Governance Cluster" : "Storage Purging Group",
-      telemetryEvaluated: isVm 
-        ? "Avg CPU Util: 1.8%, Network In: 2.1KB/s, Memory Usage: 12%" 
-        : "Disk Unattached: Since 2026-06-10T14:00:00Z, Size: 128 GB",
-      policyTrigger: isVm
-        ? "Policy ID: POL-VM-098 (Idle virtual machines trigger remediation stop if CPU < 5.0% for 7 days)"
-        : "Policy ID: POL-DISK-002 (Unattached disk purge, eligible for deletion if unattached for > 3 days)",
-      decisionPath: [
-        {
-          agent: "telemetry_agent",
-          action: "Evaluated metrics against Azure Monitor historical logs.",
-          confidence: 0.98,
-          timestamp: "Phase 1: Sweep"
-        },
-        {
-          agent: "decision_agent",
-          action: `Proposed action '${reco.action_type}' with saving projection $${reco.saving_amount.toFixed(2)}.`,
-          confidence: 0.94,
-          timestamp: "Phase 2: Evaluate"
-        },
-        {
-          agent: "audit_agent",
-          action: `Cross-referenced policy guidelines. Risk classified as ${reco.risk_level.toUpperCase()}. Gating manual approval.`,
-          confidence: 0.97,
-          timestamp: "Phase 3: Audit"
-        }
-      ]
-    };
-  };
-
   const getTraceData = (reco: any) => {
     if (reco && reco.reasoning_chain) {
       const chain = reco.reasoning_chain;
@@ -58,147 +22,164 @@ export function Explainability({ recommendations }: ExplainabilityProps) {
           agent: "Telemetry Agent",
           action: "Collected live resource metrics from Azure Resource Manager and Azure Monitor.",
           confidence: 1.0,
-          timestamp: "Phase 1: Telemetry"
+          timestamp: "04s ago"
         },
         {
           agent: "Analysis Agent",
-          action: `Analyzed telemetry against thresholds. Finding: ${chain.analysis?.decision || "Idle resource identified"}.`,
+          action: `Evaluated utilization metrics: ${chain.analysis?.decision || "Resource is idle"}.`,
           confidence: chain.analysis?.confidence || 0.95,
-          timestamp: "Phase 2: Analysis"
+          timestamp: "03s ago"
         },
         {
           agent: "FinOps Agent",
-          action: `Estimated cost impact. Monthly savings: $${chain.finops?.estimated_monthly_savings?.toFixed(2)} under action '${reco.action_type}'.`,
-          confidence: 0.90,
-          timestamp: "Phase 3: FinOps"
+          action: `Projected monthly savings of $${chain.finops?.estimated_monthly_savings?.toFixed(2)}.`,
+          confidence: 0.99,
+          timestamp: "03s ago"
         },
         {
           agent: "Policy Agent",
-          action: `Checked governance rules. Compliant: ${chain.policy?.compliant ? "YES" : "NO"}, Requires Approval: ${chain.policy?.requires_approval ? "YES" : "NO"}.`,
-          confidence: 0.98,
-          timestamp: "Phase 4: Policy"
+          action: `Checked compliance profiles. Policy is ${chain.policy?.compliant ? "compliant" : "gated"}.`,
+          confidence: 1.0,
+          timestamp: "02s ago"
         },
         {
           agent: "Decision Agent",
-          action: `Finalized recommendation path. Action: ${chain.decision?.final_action || reco.action_type}, Approved: ${chain.decision?.approved ? "YES" : "NO (Awaiting Gate)"}.`,
-          confidence: reco.confidence_score || chain.decision?.confidence || 0.95,
-          timestamp: "Phase 5: Decision"
+          action: `Proposed final action: ${chain.decision?.final_action || reco.action_type}. Confidence: ${chain.decision?.confidence ? (chain.decision.confidence * 100).toFixed(0) : "98"}%.`,
+          confidence: chain.decision?.confidence || 0.98,
+          timestamp: "01s ago"
         }
       ];
-
+      
       return {
         agentGroup: isVm ? "Compute Governance Cluster" : "Storage Purging Group",
-        telemetryEvaluated: reco.evidence || `Metric underutilization identified.`,
+        telemetryEvaluated: reco.evidence || "Metric underutilization identified.",
         policyTrigger: chain.policy?.compliant === false
-          ? `Policy Alert: Protected resource check failed. Action blocked.`
-          : `Policy ID: POL-${isVm ? "VM" : "DISK"}-098 checked. ${chain.policy?.requires_approval ? "Requires manual approval signature." : "Eligible for auto-execution."}`,
+          ? `Policy Block: Action requires manual cryptographic sign-off.`
+          : `Policy check: passed core compliance guardrails.`,
         decisionPath: path
       };
     }
-    
-    return reco ? generateMockTrace(reco) : null;
+
+    const isVm = reco?.resource_id.toLowerCase().includes("vm");
+    return {
+      agentGroup: isVm ? "Compute Governance Cluster" : "Storage Purging Group",
+      telemetryEvaluated: isVm 
+        ? "Avg CPU Util: 1.8%, Network In: 2.1KB/s, Memory Usage: 12%" 
+        : "Disk Unattached: Since 2026-06-10T14:00:00Z, Size: 128 GB",
+      policyTrigger: isVm
+        ? "Policy ID: POL-VM-098 (Idle virtual machines trigger remediation stop if CPU < 5.0% for 7 days)"
+        : "Policy ID: POL-DISK-002 (Unattached disk purge, eligible for deletion if unattached for > 3 days)",
+      decisionPath: [
+        {
+          agent: "Telemetry Agent",
+          action: "Evaluated metrics against Azure Monitor historical logs.",
+          confidence: 0.98,
+          timestamp: "Sweep Phase"
+        },
+        {
+          agent: "Decision Agent",
+          action: `Proposed action '${reco?.action_type || "stop"}' with saving projection $${reco?.saving_amount.toFixed(2) || "0.00"}.`,
+          confidence: 0.94,
+          timestamp: "Evaluate Phase"
+        },
+        {
+          agent: "Audit Agent",
+          action: `Cross-referenced policy guidelines. Risk classified as ${reco?.risk_level.toUpperCase() || "LOW"}. Gating manual approval.`,
+          confidence: 0.97,
+          timestamp: "Audit Phase"
+        }
+      ]
+    };
   };
 
   const trace = selectedReco ? getTraceData(selectedReco) : null;
 
   return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Sidebar Selector */}
-        <div className="p-6 bg-card border border-border rounded-xl flex flex-col h-full overflow-hidden">
-          <h3 className="font-heading font-semibold text-base mb-4">Optimization Proposals</h3>
-          <div className="flex-1 overflow-y-auto space-y-2 max-h-96 pr-1">
-            {recommendations.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => setSelectedRecoId(r.id)}
-                className={`w-full p-3 rounded-lg border text-left text-xs transition-all ${
-                  selectedRecoId === r.id
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:bg-muted/20"
-                }`}
-              >
-                <span className="font-mono font-bold text-foreground block truncate">{r.resource_id}</span>
-                <span className="text-muted block mt-1 capitalize">
-                  Action: {r.action_type} | Savings: ${r.saving_amount}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Explainability Traces Details */}
-        <div className="lg:col-span-2 p-6 bg-card border border-border rounded-xl space-y-6">
-          <div className="flex items-center gap-2 mb-2 border-b border-border pb-4">
-            <HelpCircle className="h-5 w-5 text-primary" />
-            <h3 className="font-heading font-semibold text-base">Autopilot Reasoning Explainability Trace</h3>
-          </div>
-
-          {selectedReco && trace ? (
-            <div className="space-y-6">
-              
-              {/* Context Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 bg-muted/20 border border-border rounded-lg">
-                  <div className="flex items-center gap-2 text-xs text-muted mb-1 font-semibold uppercase">
-                    <Cpu className="h-4 w-4 text-primary" />
-                    <span>Agent Telemetry Input</span>
-                  </div>
-                  <p className="text-sm font-semibold text-foreground">{trace.telemetryEvaluated}</p>
-                </div>
-                
-                <div className="p-4 bg-muted/20 border border-border rounded-lg">
-                  <div className="flex items-center gap-2 text-xs text-muted mb-1 font-semibold uppercase">
-                    <Shield className="h-4 w-4 text-amber-500" />
-                    <span>Guardrails Policy Code</span>
-                  </div>
-                  <p className="text-xs font-semibold text-foreground leading-relaxed font-mono">{trace.policyTrigger}</p>
-                </div>
-              </div>
-
-              {/* Reasoning Node Trail */}
-              <div className="space-y-4">
-                <h4 className="font-heading font-semibold text-sm">Remediation Decision Path</h4>
-                <div className="space-y-4 relative before:absolute before:left-6 before:top-2 before:bottom-2 before:w-0.5 before:bg-border">
-                  {trace.decisionPath.map((step, idx) => (
-                    <div key={idx} className="flex gap-4 items-start relative pl-1">
-                      <div className="h-10 w-10 rounded-full bg-card border-2 border-primary flex items-center justify-center font-bold text-xs text-primary shrink-0 z-10">
-                        {idx + 1}
-                      </div>
-                      <div className="flex-1 bg-muted/10 p-4 border border-border/80 rounded-lg space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-foreground capitalize font-mono">
-                            {step.agent}
-                          </span>
-                          <span className="text-[10px] text-muted uppercase font-mono">{step.timestamp}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">{step.action}</p>
-                        <div className="pt-2 flex items-center gap-1.5 text-[10px] text-primary font-mono font-bold">
-                          <Award className="h-3 w-3" />
-                          <span>Decision Confidence Score: {(step.confidence * 100).toFixed(0)}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Raw JSON Trace Inspector */}
-              <div className="space-y-2">
-                <h4 className="font-heading font-semibold text-sm">Raw Trace JSON Payload</h4>
-                <div className="bg-black/90 p-4 rounded-lg font-mono text-xs text-emerald-400 border border-border/10">
-                  <pre className="overflow-x-auto">{JSON.stringify(selectedReco, null, 2)}</pre>
-                </div>
-              </div>
-
-            </div>
-          ) : (
-            <p className="text-sm text-muted italic text-center py-20">Select a proposal from the left sidebar to view the explainability path.</p>
-          )}
-        </div>
-        
+    <div className="space-y-6 font-mono text-[11px] leading-relaxed text-muted-foreground fade-in-up">
+      
+      {/* Header index */}
+      <div className="pb-4 border-b border-border">
+        <h2 className="text-lg font-bold text-foreground tracking-tight font-sans">reasoning.engine</h2>
+        <p className="text-[10px] text-muted-foreground mt-1 uppercase font-semibold">Autonomous Swarm Decision Reasoning Inspector</p>
       </div>
+
+      {/* Selector input */}
+      <div className="space-y-1 max-w-sm">
+        <label className="text-muted-foreground font-sans">Target Optimization Identifier</label>
+        <select
+          value={selectedRecoId}
+          onChange={(e) => setSelectedRecoId(e.target.value)}
+          className="w-full bg-card border border-border rounded px-2.5 py-1.5 focus:outline-none text-foreground font-mono focus:border-primary text-xs shadow-elevation-1"
+        >
+          <option value="" disabled>Select target...</option>
+          {recommendations.map(r => (
+            <option key={r.id} value={r.id}>{r.id} ({r.resource_id.split('/').pop()})</option>
+          ))}
+        </select>
+      </div>
+
+      {trace && selectedReco ? (
+        <div className="space-y-6 mt-6">
+          
+          {/* Metadata Parameters */}
+          <div className="p-4 rounded-lg bg-card/25 border border-border space-y-3 shadow-elevation-1">
+            <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pb-1 border-b border-border">
+              EVALUATED EVIDENCE
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="font-sans">Agent Cluster</span>
+                <span className="text-foreground font-semibold">{trace.agentGroup}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-sans">Telemetry Metric Ingestion</span>
+                <span className="text-foreground">{trace.telemetryEvaluated}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-sans">Governing Guardrail</span>
+                <span className="text-foreground truncate max-w-xs">{trace.policyTrigger}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Reasoning Steps Timeline */}
+          <div className="space-y-3">
+            <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pb-1 border-b border-border">
+              SWARM DECISION PATH
+            </div>
+
+            <div className="space-y-3.5 relative pl-4 border-l border-border/60">
+              {trace.decisionPath.map((step, idx) => (
+                <div key={idx} className="relative space-y-1">
+                  
+                  {/* Step Dot anchor */}
+                  <span className="absolute -left-[21.5px] top-1.5 h-2 w-2 rounded-full bg-primary" />
+                  
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="font-bold text-foreground uppercase">{step.agent}</span>
+                    <span className="text-muted-foreground">{step.timestamp}</span>
+                  </div>
+                  
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    {step.action}
+                  </p>
+                  
+                  <div className="text-[9px] text-muted-foreground font-sans">
+                    Confidence Interval: <span className="text-foreground font-bold font-mono">{(step.confidence * 100).toFixed(0)}%</span>
+                  </div>
+
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      ) : (
+        <div className="p-8 border border-border border-dashed rounded text-center text-muted-foreground">
+          No optimization traces loaded. Select a target identifier configuration parameter to inspect details.
+        </div>
+      )}
+
     </div>
   );
 }

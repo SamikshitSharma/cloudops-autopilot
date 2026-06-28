@@ -108,6 +108,8 @@ export function DashboardLayout({
     { id: "recommendations", label: "optimizations.json", file: "optimizations.json" },
     { id: "workflow", label: "compile.workflow", file: "compile.workflow" },
     { id: "approvals", label: "compliance.gate", file: "compliance.gate" },
+    { id: "explainability", label: "reasoning.engine", file: "reasoning.engine" },
+    { id: "audit", label: "audit.terminal", file: "audit.terminal" },
   ];
 
   return (

@@ -1,19 +1,4 @@
 import React, { useState } from "react";
-import { 
-  ShieldCheck, 
-  Check, 
-  DollarSign, 
-  ShieldAlert, 
-  KeyRound, 
-  Activity,
-  User,
-  ExternalLink,
-  Fingerprint,
-  Cpu,
-  CheckCircle2,
-  Lock,
-  LockOpen
-} from "lucide-react";
 import type { RecommendationDTO, ApprovalDTO } from "../api/client";
 
 interface ApprovalsProps {
@@ -23,199 +8,192 @@ interface ApprovalsProps {
 }
 
 export function Approvals({ recommendations, approvals, approve }: ApprovalsProps) {
-  const [operatorId, setOperatorId] = useState("Dashboard-Operator");
-  const [signingState, setSigningState] = useState<Record<string, "idle" | "signing" | "success">>({});
-  const [signingProgress, setSigningProgress] = useState<Record<string, number>>({});
-  const [cryptoHash, setCryptoHash] = useState<Record<string, string>>({});
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [sliderVal, setSliderVal] = useState<Record<string, number>>({});
+  const [approvedState, setApprovedState] = useState<Record<string, "idle" | "success">>({});
+  const [tokens, setTokens] = useState<Record<string, string>>({});
 
-  // Link recommendations with their approvals
   const pendingApprovalsList = approvals
     .filter(a => a.status === "pending")
     .map(app => {
       const reco = recommendations.find(r => r.id === app.recommendation_id);
       return { approval: app, recommendation: reco };
     })
-    .filter(item => item.recommendation !== undefined);
+    .filter(item => item.recommendation !== undefined) as { approval: ApprovalDTO; recommendation: RecommendationDTO }[];
 
-  const generateRandomHash = () => {
-    const chars = '0123456789abcdef';
-    let hash = '0x';
-    for (let i = 0; i < 40; i++) hash += chars[Math.floor(Math.random() * chars.length)];
-    return hash;
+  const generateJWTClaims = (item: { approval: ApprovalDTO; recommendation: RecommendationDTO }) => {
+    return JSON.stringify({
+      sub: item.recommendation.resource_id.split('/').pop(),
+      action: item.recommendation.action_type,
+      workflow_id: item.approval.recommendation_id,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      iss: "autopilot-compliance",
+      gate_token_id: `app-${item.approval.id}`
+    }, null, 2);
   };
 
-  const handleApprove = async (approvalId: string) => {
-    setSigningState(prev => ({ ...prev, [approvalId]: "signing" }));
-    setSigningProgress(prev => ({ ...prev, [approvalId]: 0 }));
+  const handleSliderChange = async (approvalId: string, val: number, item: any) => {
+    if (!checked[approvalId]) return;
     
-    // Animate the cryptographic signing
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 15;
-      if (progress > 100) progress = 100;
+    setSliderVal(prev => ({ ...prev, [approvalId]: val }));
+
+    if (val === 100) {
+      setApprovedState(prev => ({ ...prev, [approvalId]: "success" }));
       
-      setSigningProgress(prev => ({ ...prev, [approvalId]: progress }));
-      setCryptoHash(prev => ({ ...prev, [approvalId]: generateRandomHash() }));
+      // Simulate compiling cryptographic token hash
+      const randomToken = "ey" + Array.from({length: 45}, () => Math.random().toString(36)[2]).join("");
+      setTokens(prev => ({ ...prev, [approvalId]: randomToken }));
 
-      if (progress === 100) {
-        clearInterval(interval);
-        finalizeApproval(approvalId);
+      try {
+        await approve(approvalId);
+      } catch (err) {
+        console.error(err);
       }
-    }, 200);
-  };
-
-  const finalizeApproval = async (approvalId: string) => {
-    try {
-      await approve(approvalId);
-      setSigningState(prev => ({ ...prev, [approvalId]: "success" }));
-      setTimeout(() => {
-        setSigningState(prev => {
-          const newState = { ...prev };
-          delete newState[approvalId];
-          return newState;
-        });
-      }, 3000);
-    } catch (err: any) {
-      console.error(err);
-      setSigningState(prev => ({ ...prev, [approvalId]: "idle" }));
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header Widget */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-border mb-6">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-3">
-            <Lock className="h-6 w-6 text-primary" />
-            Approval Center
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">Cryptographic execution gates for autonomous cloud remediation operations.</p>
-        </div>
-        <div className="flex items-center gap-4 text-xs">
-          <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-md border border-border">
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider font-bold">Operator ID:</span>
-            <div className="relative">
-              <User className="absolute left-1.5 top-1 h-3.5 w-3.5 text-primary" />
-              <input
-                type="text"
-                value={operatorId}
-                onChange={(e) => setOperatorId(e.target.value)}
-                className="bg-transparent border-none pl-6 pr-2 py-0.5 text-[11px] text-foreground font-mono font-bold w-40 focus:outline-none focus:ring-0"
-              />
+    <div className="space-y-6 font-mono text-[11px] leading-relaxed text-muted-foreground fade-in-up">
+      
+      {/* Header index */}
+      <div className="pb-4 border-b border-border">
+        <h2 className="text-lg font-bold text-foreground tracking-tight font-sans">compliance.gate</h2>
+        <p className="text-[10px] text-muted-foreground mt-1 uppercase font-semibold">Cryptographic Human-in-the-Loop Approval Sign-offs</p>
+      </div>
+
+      {/* Grid panels */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        
+        {/* Left Column: Pending approvals list */}
+        <div className="space-y-2 border-r border-border/40 pr-0 lg:pr-6">
+          <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pb-1 border-b border-border">
+            AWAITING AUTHORIZATION
+          </div>
+
+          {pendingApprovalsList.length > 0 ? (
+            <div className="space-y-1 mt-3">
+              {pendingApprovalsList.map(({ approval, recommendation }) => {
+                const isApproved = approvedState[approval.id] === 'success';
+                return (
+                  <div
+                    key={approval.id}
+                    className={`p-2.5 rounded border ${
+                      isApproved ? 'bg-success/5 border-success/30' : 'bg-card/45 border-border'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center text-foreground font-bold">
+                      <span>Gate: app-{approval.id}</span>
+                      <span className={`text-[9px] px-1 rounded uppercase font-semibold ${
+                        isApproved ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'
+                      }`}>
+                        {isApproved ? 'authorized' : 'gated'}
+                      </span>
+                    </div>
+                    <div className="text-[10px] mt-1 space-y-0.5">
+                      <div>Target: <span className="text-foreground">{recommendation.resource_id.split('/').pop()}</span></div>
+                      <div>Action: <span className="text-primary uppercase font-bold">{recommendation.action_type}</span></div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          ) : (
+            <div className="p-4 border border-border border-dashed rounded text-center text-muted-foreground mt-3">
+              No pending approvals. Autopilot is fully authorized.
+            </div>
+          )}
         </div>
-      </div>
 
-      {/* Approvals Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {pendingApprovalsList.length === 0 ? (
-          <div className="md:col-span-2 p-16 border-2 border-dashed border-border rounded-xl text-center bg-muted/10">
-            <ShieldCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <p className="text-sm font-bold text-foreground uppercase tracking-wider">Zero Pending Gates</p>
-            <p className="text-xs text-muted-foreground mt-2 max-w-sm mx-auto leading-relaxed">
-              All active agent sweeps have completed or are operating within permitted guardrail boundaries. No manual intervention required.
-            </p>
+        {/* Right Columns: JWT verification and Slider swipe gate */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pb-1 border-b border-border">
+            SIGNATURE CONSOLE
           </div>
-        ) : (
-          pendingApprovalsList.map(({ approval, recommendation }) => {
-            if (!recommendation) return null;
-            const isHighRisk = recommendation.risk_level === "high";
-            const state = signingState[approval.id] || "idle";
-            const progress = signingProgress[approval.id] || 0;
-            const hash = cryptoHash[approval.id] || "0x0000000000000000000000000000000000000000";
 
-            return (
-              <div key={approval.id} className={`glass-panel p-6 border rounded-xl flex flex-col justify-between space-y-6 shadow-xl relative overflow-hidden transition-all duration-300 ${
-                isHighRisk ? "border-rose-500/50 shadow-rose-500/10" : "border-border hover:border-primary/50"
-              }`}>
-                {isHighRisk && <div className="absolute top-0 left-0 w-1.5 h-full bg-rose-500" />}
+          {pendingApprovalsList.length > 0 ? (
+            <div className="space-y-5">
+              {pendingApprovalsList.map((item) => {
+                const approvalId = item.approval.id;
+                const isApproved = approvedState[approvalId] === 'success';
+                const currentVal = sliderVal[approvalId] || 0;
                 
-                <div className="space-y-4 relative z-10">
-                  {/* Header: Action type & Risk level */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-md border bg-card text-foreground border-border flex items-center gap-1.5">
-                      <Cpu className="h-3 w-3 text-primary" />
-                      {recommendation.action_type.replace(/_/g, " ")}
-                    </span>
-                    <span className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-md border flex items-center gap-1.5 ${
-                      isHighRisk ? "bg-rose-500/10 text-rose-500 border-rose-500/20" : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                    }`}>
-                      {isHighRisk ? <ShieldAlert className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
-                      {recommendation.risk_level} RISK
-                    </span>
-                  </div>
-
-                  {/* Target resource & savings */}
-                  <div className="space-y-2 bg-muted/20 p-4 rounded-lg border border-border/50">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mb-1">Target Asset ID</p>
-                    <h4 className="text-sm font-bold text-foreground font-mono truncate">{recommendation.resource_id}</h4>
+                return (
+                  <div key={approvalId} className="space-y-4 pb-4 border-b border-border/40">
                     
-                    <div className="mt-3 pt-3 border-t border-border/50 grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mb-1">MRR Impact</p>
-                        <p className="font-mono font-bold text-emerald-500 text-xs">+${recommendation.saving_amount.toFixed(2)}/mo</p>
+                    {/* JWT Monospace Block */}
+                    <div className="border border-border rounded bg-card/15 overflow-hidden shadow-elevation-1">
+                      <div className="bg-card px-3 py-1.5 border-b border-border text-muted-foreground text-[10px] font-bold">
+                        COMPLIANCE CLAIMS PAYLOAD (JSON)
                       </div>
-                      <div>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mb-1">Agent Confidence</p>
-                        <p className="font-mono font-bold text-primary text-xs">{((recommendation.confidence_score || 0.95) * 100).toFixed(0)}%</p>
-                      </div>
+                      <pre className="p-3 text-[10px] leading-relaxed text-foreground/80 overflow-x-auto select-text font-mono">
+                        {generateJWTClaims(item)}
+                      </pre>
                     </div>
-                  </div>
-                </div>
 
-                {/* Cryptographic Signing Overlay or Button */}
-                <div className="relative z-10">
-                  {state === "idle" ? (
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono uppercase tracking-wider">
-                        <KeyRound className="h-3.5 w-3.5 text-primary" />
-                        <span>Requires signature</span>
+                    {/* Token signature output upon success */}
+                    {isApproved && tokens[approvalId] && (
+                      <div className="p-2.5 border border-success/30 bg-success/5 rounded text-success text-[10px] break-all font-mono">
+                        [TOKEN COMPILED & INJECTED]: {tokens[approvalId]}
                       </div>
-                      <button
-                        onClick={() => handleApprove(approval.id)}
-                        className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold uppercase tracking-wider transition-all"
-                      >
-                        <Fingerprint className="h-4 w-4" />
-                        Sign & Execute
-                      </button>
-                    </div>
-                  ) : state === "signing" ? (
-                    <div className="bg-black/80 rounded-lg p-4 border border-border scanline-effect">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-bold text-primary uppercase tracking-widest flex items-center gap-2">
-                          <Activity className="h-3.5 w-3.5 animate-pulse" />
-                          Generating Cryptographic Token...
-                        </span>
-                        <span className="text-[10px] font-mono text-muted-foreground">{Math.floor(progress)}%</span>
+                    )}
+
+                    {/* Sign-off Slider gate */}
+                    {!isApproved && (
+                      <div className="space-y-3 p-4 border border-border rounded-lg bg-card/35 shadow-elevation-1">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`verify-${approvalId}`}
+                            checked={checked[approvalId] || false}
+                            onChange={(e) => setChecked(prev => ({ ...prev, [approvalId]: e.target.checked }))}
+                            className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5"
+                          />
+                          <label htmlFor={`verify-${approvalId}`} className="text-[10px] font-sans text-muted-foreground cursor-pointer">
+                            I verify this optimization complies with FinOps guardrail metrics requirements.
+                          </label>
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="text-[9px] text-muted-foreground flex justify-between font-mono">
+                            <span>Drag handle to compile and authorize token</span>
+                            <span>{currentVal}%</span>
+                          </div>
+                          
+                          <div className="relative flex items-center h-8 bg-background border border-border rounded-full overflow-hidden">
+                            {/* Slide fill background */}
+                            <div 
+                              className="absolute left-0 top-0 bottom-0 bg-primary/10 transition-all duration-75"
+                              style={{ width: `${currentVal}%` }}
+                            />
+                            
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={currentVal}
+                              disabled={!checked[approvalId]}
+                              onChange={(e) => handleSliderChange(approvalId, parseInt(e.target.value), item)}
+                              className={`w-full h-full opacity-70 cursor-pointer accent-primary disabled:opacity-30 disabled:cursor-not-allowed`}
+                            />
+                          </div>
+                        </div>
                       </div>
-                      
-                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mb-3">
-                        <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
-                      </div>
-                      
-                      <div className="text-[9px] font-mono text-muted-foreground break-all leading-tight opacity-70">
-                        {hash}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-emerald-500/10 rounded-lg p-4 border border-emerald-500/30 flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                        <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-emerald-500 uppercase tracking-widest">Signature Verified</p>
-                        <p className="text-[10px] font-mono text-muted-foreground mt-0.5">Execution payload dispatched to orchestrator.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
+                    )}
+
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-8 border border-border border-dashed rounded text-center text-muted-foreground">
+              All compliance checks resolved. No gates are currently blocking compiler state execution.
+            </div>
+          )}
+
+        </div>
+
       </div>
+
     </div>
   );
 }
