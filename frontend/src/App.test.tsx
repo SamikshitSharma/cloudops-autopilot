@@ -49,6 +49,9 @@ vi.mock("lucide-react", () => ({
   ShieldAlert: () => <span>ShieldAlert</span>,
   CheckCircle2: () => <span>CheckCircle2</span>,
   AlertCircle: () => <span>AlertCircle</span>,
+  Folder: () => <span>Folder</span>,
+  Maximize2: () => <span>Maximize2</span>,
+  Minimize2: () => <span>Minimize2</span>,
 }));
 
 vi.mock("recharts", () => ({

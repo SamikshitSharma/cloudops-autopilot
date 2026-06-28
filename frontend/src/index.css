@@ -6,80 +6,72 @@
 
 @layer base {
   :root {
-    /* --- Light Theme (Aether Quartz) --- */
-    --background: 220 10% 98%;       /* hsl(220, 10%, 98%) - #FAFAFC */
-    --foreground: 220 20% 12%;       /* hsl(220, 20%, 12%) - #1C1E24 */
+    /* --- Light Theme (Aether Warm White) --- */
+    --background: 0 0% 98%;           /* hsl(0, 0%, 98%) - #FAFAFA */
+    --foreground: 220 20% 12%;        /* hsl(220, 20%, 12%) - #1D2026 */
     
-    --card: 0 0% 100%;               /* hsl(0, 0%, 100%) - #FFFFFF */
-    --card-foreground: 220 20% 12%;  /* hsl(220, 20%, 12%) */
+    --card: 220 8% 95%;               /* hsl(220, 8%, 95%) - #F0F1F4 */
+    --card-foreground: 220 20% 12%;   /* hsl(220, 20%, 12%) */
     
-    --popover: 0 0% 100%;
+    --popover: 220 8% 95%;
     --popover-foreground: 220 20% 12%;
     
-    --primary: 215 90% 55%;         /* hsl(215, 90%, 55%) - Cyber Sapphire #1E66F5 */
+    --primary: 226 65% 48%;           /* hsl(226, 65%, 48%) - Slate Blue #2E46A5 */
     --primary-foreground: 0 0% 98%;
     
-    --secondary: 220 12% 91%;        /* hsl(220, 12%, 91%) - #E4E7EB */
-    --secondary-foreground: 220 10% 42%; /* hsl(220, 10%, 42%) - #636875 */
+    --secondary: 220 10% 91%;         /* hsl(220, 10%, 91%) - #E2E4E8 */
+    --secondary-foreground: 220 10% 45%; /* hsl(220, 10%, 45%) - #69717D */
     
-    --muted: 220 12% 91%;
-    --muted-foreground: 220 8% 58%; /* hsl(220, 8%, 58%) - #9196A3 */
+    --muted: 220 10% 91%;
+    --muted-foreground: 220 10% 45%;
     
-    --accent: 220 12% 91%;
+    --accent: 220 10% 91%;
     --accent-foreground: 220 20% 12%;
     
-    --destructive: 348 90% 55%;     /* hsl(348, 90%, 55%) - Crimson Pulse */
+    --destructive: 348 75% 50%;       /* Quiet crimson */
     --destructive-foreground: 0 0% 98%;
     
-    --border: 220 12% 91%;          /* hsl(220, 12%, 91%) */
-    --input: 220 12% 91%;
-    --ring: 215 90% 55%;
+    --border: 220 10% 91%;            /* hsl(220, 10%, 91%) */
+    --input: 220 10% 91%;
+    --ring: 226 65% 48%;
     
     --radius: 8px;
-    --shadow-glass: 0 8px 32px 0 rgba(20, 25, 35, 0.08);
 
     /* Semantic Alerts */
-    --success: 150 80% 40%;          /* HSL Emerald */
-    --warning: 38 95% 55%;           /* HSL Amber */
-    --danger: 348 90% 55%;           /* HSL Crimson */
-
-    /* Resource Action Colors */
-    --action-resize: 270 75% 60%;    /* Amethyst */
-    --action-stop: 200 80% 50%;      /* Glacier Slate */
-    --action-delete: 10 85% 50%;     /* Magma Orange */
+    --success: 150 60% 45%;           /* Quiet emerald */
+    --warning: 38 80% 50%;            /* Quiet amber */
+    --danger: 348 75% 50%;            /* Quiet crimson */
   }
 
   .dark {
-    /* --- Dark Theme (Obsidian Cyber) --- */
-    --background: 220 16% 6%;        /* hsl(220, 16%, 6%) - #0F1115 */
-    --foreground: 220 10% 94%;       /* hsl(220, 10%, 94%) - #EFF1F5 */
+    /* --- Dark Theme (Obsidian Graphite) --- */
+    --background: 220 15% 7%;         /* hsl(220, 15%, 7%) - #0F1013 */
+    --foreground: 0 0% 93%;           /* hsl(0, 0%, 93%) - #ECECEC */
     
-    --card: 220 14% 10%;             /* hsl(220, 14%, 10%) - #141820 */
-    --card-foreground: 220 10% 94%;
+    --card: 220 10% 10%;              /* hsl(220, 10%, 10%) - #14161B */
+    --card-foreground: 0 0% 93%;
     
-    --popover: 220 14% 10%;
-    --popover-foreground: 220 10% 94%;
+    --popover: 220 10% 10%;
+    --popover-foreground: 0 0% 93%;
     
-    --primary: 215 90% 55%;         /* Cyber Sapphire */
+    --primary: 215 60% 52%;           /* hsl(215, 60%, 52%) - Quiet Slate-Blue #3B58B8 */
     --primary-foreground: 0 0% 98%;
     
-    --secondary: 220 10% 14%;        /* #212631 */
-    --secondary-foreground: 220 6% 65%; /* hsl(220, 6%, 65%) - #9CA3AF */
+    --secondary: 220 8% 14%;          /* #1E2026 */
+    --secondary-foreground: 220 6% 55%; /* hsl(220, 6%, 55%) - #858E9B */
     
-    --muted: 220 10% 14%;
-    --muted-foreground: 220 4% 48%; /* hsl(220, 4%, 48%) - #6B7280 */
+    --muted: 220 8% 14%;
+    --muted-foreground: 220 6% 55%;
     
-    --accent: 220 10% 14%;
-    --accent-foreground: 220 10% 94%;
+    --accent: 220 8% 14%;
+    --accent-foreground: 0 0% 93%;
     
-    --destructive: 348 90% 55%;
+    --destructive: 348 75% 50%;
     --destructive-foreground: 0 0% 94%;
     
-    --border: 220 10% 18%;          /* hsl(220, 10%, 18%) - #262C3A */
-    --input: 220 10% 18%;
-    --ring: 215 90% 55%;
-
-    --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+    --border: 220 8% 14%;             /* hsl(220, 8%, 14%) */
+    --input: 220 8% 14%;
+    --ring: 215 60% 52%;
   }
 }
 
@@ -93,9 +85,9 @@
     font-family: 'Geist Sans', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     letter-spacing: -0.015em;
     overflow-x: hidden;
-    transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1), 
-                color 0.3s cubic-bezier(0.16, 1, 0.3, 1), 
-                border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
+                color 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
+                border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
   
   /* Monospace overrides */
@@ -107,8 +99,8 @@
 
 /* Custom Minimalist Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -118,22 +110,19 @@
   border-radius: var(--radius);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: hsl(var(--muted-foreground) / 0.4);
+  background-color: hsl(var(--muted-foreground) / 0.3);
 }
 
-/* Stripe/Linear style grid and dot overlay patterns */
-.bg-dot-pattern {
-  background-image: radial-gradient(hsl(var(--muted-foreground) / 0.08) 1px, transparent 1px);
-  background-size: 24px 24px;
+/* Depth Elevations */
+.shadow-elevation-1 {
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.2);
 }
 
-.bg-grid-pattern {
-  background-image: linear-gradient(to right, hsl(var(--border) / 0.3) 1px, transparent 1px),
-                    linear-gradient(to bottom, hsl(var(--border) / 0.3) 1px, transparent 1px);
-  background-size: 32px 32px;
+.shadow-elevation-2 {
+  box-shadow: 0 16px 40px -6px rgba(0, 0, 0, 0.4);
 }
 
-/* Motion system & physics curve definitions */
+/* Physics transitions */
 .transition-spring-350 {
   transition: all 350ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -143,38 +132,19 @@
 }
 
 @keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .fade-in-up {
-  animation: fade-in-up 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes slide-in-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-.slide-in-right {
-  animation: slide-in-right 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes approval-glow {
-  0% { box-shadow: 0 0 0 0 rgba(245, 166, 35, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(245, 166, 35, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(245, 166, 35, 0); }
-}
-
-.animate-approval-glow {
-  animation: approval-glow 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation: fade-in-up 250ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes status-pulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.2); opacity: 0.4; }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .animate-status-pulse {
-  animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: status-pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
