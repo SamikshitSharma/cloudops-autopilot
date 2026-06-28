@@ -5,8 +5,9 @@ import { WorkflowExecution } from "./views/WorkflowExecution";
 import { Inventory } from "./views/Inventory";
 import { Topology } from "./views/Topology";
 import { Recommendations } from "./views/Recommendations";
-import { EventBus } from "./views/EventBus";
 import { Approvals } from "./views/Approvals";
+import { Explainability } from "./views/Explainability";
+import { AuditLogs } from "./views/AuditLogs";
 import { useWorkflow } from "./hooks/useWorkflow";
 
 function App() {
@@ -47,6 +48,7 @@ function App() {
           />
         );
       case "inventory":
+        // Keep inventory view in compiler for tests, although hidden from navigation rail
         return <Inventory resources={resources} />;
       case "topology":
         return <Topology resources={resources} recommendations={recommendations} activeRunDetails={runDetails} />;
@@ -64,8 +66,6 @@ function App() {
             selectRun={selectRun}
           />
         );
-      case "eventbus":
-        return <EventBus runs={runsDetails} activeRunDetails={runDetails} />;
       case "approvals":
         return (
           <Approvals
@@ -74,6 +74,10 @@ function App() {
             approve={approve}
           />
         );
+      case "explainability":
+        return <Explainability recommendations={recommendations} />;
+      case "audit":
+        return <AuditLogs runs={runsDetails} refresh={refresh} />;
       default:
         return (
           <Overview 
@@ -88,7 +92,12 @@ function App() {
   };
 
   return (
-    <DashboardLayout currentTab={currentTab} setCurrentTab={setCurrentTab}>
+    <DashboardLayout 
+      currentTab={currentTab} 
+      setCurrentTab={setCurrentTab}
+      recommendations={recommendations}
+      activeRunDetails={runDetails}
+    >
       {renderContent()}
     </DashboardLayout>
   );
