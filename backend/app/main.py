@@ -17,9 +17,11 @@ import backend.app.models
 from backend.app.models.run import Run as DBRun, AuditLog as DBAuditLog
 from backend.app.models.resource import Resource as DBResource
 from backend.app.models.recommendation import Recommendation as DBRecommendation, Approval as DBApproval
+from backend.app.models.reasoning_path import AgentReasoningPath as DBAgentReasoningPath
 
 from backend.app.workflow.coordinator import WorkflowCoordinator
 from backend.app.workflow.models import WorkflowStatus
+from backend.app.workflow.router import router as workflows_router
 
 from pydantic import ValidationError
 from jose.exceptions import JWTError
@@ -33,7 +35,8 @@ from backend.app.schemas.api import (
     ResourceDTO,
     RecommendationDTO,
     ApprovalDTO,
-    HealthDTO
+    HealthDTO,
+    AgentReasoningPathDTO
 )
 
 # Initialize logging
@@ -88,6 +91,10 @@ tags_metadata = [
     {
         "name": "Approvals",
         "description": "Manage human-in-the-loop approvals for resource state changes."
+    },
+    {
+        "name": "Reasoning Paths",
+        "description": "Retrieve step-by-step cognitive reasoning pathways of the agents."
     }
 ]
 
@@ -178,6 +185,7 @@ async def unexpected_exception_handler(request, exc: Exception):
 # --- API ROUTERS ---
 
 v1_router = APIRouter(prefix="/api/v1")
+v1_router.include_router(workflows_router)
 
 @v1_router.get("/health", response_model=APIResponse, tags=["Health"])
 async def check_health(db: Session = Depends(get_db)):
@@ -213,26 +221,88 @@ async def list_runs(db: Session = Depends(get_db)):
 
 @v1_router.post("/runs", response_model=APIResponse, tags=["Runs"])
 async def trigger_run(payload: TriggerRunRequest, db: Session = Depends(get_db)):
-    """Initiates a new multi-agent sweep run for a specific scenario."""
+    """Initiates a new multi-agent sweep run for a specific scenario using the Sequential Engine."""
     run_id = str(uuid.uuid4())
     try:
-        workflow_run = await coordinator.run_autopilot_reasoning(
+        from shared.config import settings
+        from backend.app.models.workflow import SequentialWorkflow
+        from backend.app.workflow.sequential_orchestrator import sequential_orchestrator_engine
+        from backend.app.schemas.workflow import WorkflowContext
+        
+        # 1. Initialize context and database records
+        correlation_id = f"corr-{uuid.uuid4()}"
+        initial_context = WorkflowContext(
+            workflow_id=f"wf-run-{run_id}",
             run_id=run_id,
+            correlation_id=correlation_id,
+            execution_mode="MOCK" if payload.dry_run or settings.CLOUD_MODE == "MOCK" else "LIVE",
             scenario_name=payload.scenario_name,
-            dry_run=payload.dry_run,
             objective=payload.objective
         )
         
-        # Query generated database run row
+        # Create legacy DBRun record for foreign key constraints
+        db_run = DBRun(
+            id=run_id,
+            status="running",
+            started_at=datetime.utcnow()
+        )
+        db.add(db_run)
+        db.commit()
+
+        # Create SequentialWorkflow record
+        wf = SequentialWorkflow(
+            id=f"wf-run-{run_id}",
+            run_id=run_id,
+            status="pending",
+            objective=payload.objective or f"Autopilot objective sweep: {payload.scenario_name}",
+            scenario_name=payload.scenario_name,
+            execution_mode="MOCK" if payload.dry_run or settings.CLOUD_MODE == "MOCK" else "LIVE",
+            correlation_id=correlation_id,
+            context=initial_context.model_dump(mode="json")
+        )
+        db.add(wf)
+        db.commit()
+        
+        # 2. Trigger Sequential Multi-Agent Workflow Engine execution
+        wf = await sequential_orchestrator_engine.execute_workflow(wf.id, db)
+        
+        # 3. Retrieve DBRun record (which may have been updated during execution)
         db_run = db.query(DBRun).filter(DBRun.id == run_id).first()
         db_run_data = RunDTO.model_validate(db_run).model_dump() if db_run else None
+        
+        # Map sequential workflow status to legacy status
+        legacy_status = "running"
+        if wf.status == "completed":
+            legacy_status = "completed"
+        elif wf.status == "failed":
+            legacy_status = "failed"
+        elif wf.status == "blocked_on_approval":
+            legacy_status = "blocked_on_approval"
 
+        # Construct legacy-compatible workflow run details representation
         data = {
             "run_id": run_id,
-            "status": workflow_run.status.value,
-            "steps_count": len(workflow_run.steps),
+            "status": legacy_status,
+            "steps_count": len(wf.stages),
             "db_record": db_run_data,
-            "workflow_details": workflow_run.model_dump()
+            "workflow_details": {
+                "id": wf.id,
+                "run_id": wf.run_id,
+                "status": legacy_status,
+                "steps": [
+                    {
+                        "id": s.stage_id,
+                        "name": s.stage_name,
+                        "status": s.status,
+                        "started_at": s.started_at.isoformat() if s.started_at else None,
+                        "completed_at": s.completed_at.isoformat() if s.completed_at else None,
+                        "error_message": s.errors.get("error") if s.errors else None,
+                        "retries_attempted": 0
+                    } for s in wf.stages
+                ],
+                "created_at": wf.created_at.isoformat() if wf.created_at else None,
+                "updated_at": wf.updated_at.isoformat() if wf.updated_at else None
+            }
         }
         return make_response(True, f"Autopilot reasoning sweep '{run_id}' completed or blocked", data)
     except Exception as e:
@@ -357,6 +427,13 @@ async def approve_recommendation(approval_id: str, payload: ApproveRequest, db: 
         "workflow_resumed": resumed
     }
     return make_response(True, "Approval granted and token signed successfully", response_data)
+
+@v1_router.get("/reasoning-paths", response_model=APIResponse, tags=["Reasoning Paths"])
+async def list_reasoning_paths(db: Session = Depends(get_db)):
+    """Retrieves all agent reasoning paths recorded during resource evaluations."""
+    paths = db.query(DBAgentReasoningPath).order_by(DBAgentReasoningPath.timestamp.desc()).all()
+    data = [AgentReasoningPathDTO.model_validate(p).model_dump() for p in paths]
+    return make_response(True, f"Retrieved {len(data)} reasoning paths successfully", data)
 
 # Register versioned routes router
 app.include_router(v1_router)

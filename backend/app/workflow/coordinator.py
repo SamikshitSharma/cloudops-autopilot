@@ -659,6 +659,42 @@ class WorkflowCoordinator:
             db_reco.action_type = final_action
             db_reco.risk_level = "high" if (requires_approval or not compliant) else "low"
             
+            # Log structured AgentReasoningPath record
+            from backend.app.models.reasoning_path import AgentReasoningPath
+            
+            obs = {
+                "resource_id": r_id,
+                "analysis_finding": analysis_data.get("decision"),
+                "analysis_confidence": analysis_data.get("confidence"),
+                "estimated_monthly_savings": finops_data.get("estimated_monthly_savings"),
+                "compliance_gate": policy_data
+            }
+            
+            hyps = [
+                {
+                    "hypothesis": f"Resource {r_id} is idle or overprovisioned due to low compute workload requirements.",
+                    "confidence": analysis_data.get("confidence", 0.95),
+                    "evidence": analysis_data.get("decision")
+                }
+            ]
+            
+            pol_status = "Compliant"
+            if requires_approval:
+                pol_status = "Requires Approval"
+            elif not compliant:
+                pol_status = "Non-Compliant"
+                
+            reasoning_path_entry = AgentReasoningPath(
+                resource_id=r_id,
+                agent_name="Executive Orchestrator Agent",
+                trigger_event=f"Autopilot objective sweep: {objective}",
+                observations=obs,
+                hypotheses=hyps,
+                policy_check_status=pol_status,
+                recommended_action=final_action
+            )
+            db.add(reasoning_path_entry)
+            
         db.commit()
 
     async def invoke_mcp_tool(self, tool_name: str, **kwargs) -> Dict[str, Any]:

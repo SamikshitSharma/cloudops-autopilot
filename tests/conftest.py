@@ -2,9 +2,25 @@ import os
 # Inject required environment configuration for tests
 os.environ["JWT_SECRET_KEY"] = "test_secret_key_for_unit_testing"
 os.environ["CLOUD_MODE"] = "MOCK"
-
+os.environ["DATABASE_URL"] = "sqlite:///./test_autopilot.db"
 
 import pytest
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_db():
+    if os.path.exists("./test_autopilot.db"):
+        try:
+            os.remove("./test_autopilot.db")
+        except Exception:
+            pass
+    yield
+    if os.path.exists("./test_autopilot.db"):
+        try:
+            os.remove("./test_autopilot.db")
+        except Exception:
+            pass
+
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from backend.app.database import Base

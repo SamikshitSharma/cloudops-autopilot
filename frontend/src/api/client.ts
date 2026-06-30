@@ -94,6 +94,91 @@ export interface HealthDTO {
   database: string;
 }
 
+// Sequential Workflow Interfaces
+export interface WorkflowStageDTO {
+  id: string;
+  stage_id: string;
+  stage_name: string;
+  status: "pending" | "running" | "success" | "failed" | "skipped";
+  started_at: string | null;
+  completed_at: string | null;
+  duration: number | null;
+  input_summary: any;
+  output_summary: any;
+  reasoning_summary: any;
+  confidence: number;
+  errors: any;
+  llm_trace: any;
+}
+
+export interface SequentialWorkflowDTO {
+  workflow_id: string;
+  run_id: string;
+  status: "pending" | "running" | "completed" | "failed" | "blocked_on_approval";
+  objective: string;
+  scenario_name: string;
+  execution_mode: "MOCK" | "LIVE";
+  correlation_id: string;
+  created_at: string;
+  updated_at: string;
+  context: any;
+  metrics: any;
+  visualization_model: any;
+  reasoning_chain: any;
+  stages: WorkflowStageDTO[];
+}
+
+export interface WorkflowCardDTO {
+  workflow_id: string;
+  run_id: string;
+  correlation_id: string;
+  status: string;
+  objective: string;
+  scenario_name: string;
+  execution_mode: string;
+  created_at: string;
+  updated_at: string;
+  progress_percentage: number;
+  duration_seconds: number | null;
+  confidence: number;
+  estimated_savings: number;
+}
+
+export interface LiveWorkflowStateDTO {
+  workflow_id: string;
+  status: string;
+  current_stage: string | null;
+  completed_stages: string[];
+  remaining_stages: string[];
+  progress_percentage: number;
+  estimated_time_remaining_seconds: number;
+  active_agent: string | null;
+  current_reasoning_summary: string | null;
+  correlation_id: string;
+  execution_mode: string;
+}
+
+export interface WorkflowMetricsDTO {
+  total_workflow_executions: number;
+  success_rate: number;
+  failure_rate: number;
+  average_workflow_duration: number;
+  average_stage_duration: Record<string, number>;
+  average_confidence: number;
+  estimated_total_savings: number;
+  most_common_failure_reasons: Array<{ reason: string; count: number }>;
+  azure_api_utilization_statistics: Record<string, number>;
+}
+
+export interface TimelineCardDTO {
+  stage_id: string;
+  stage_name: string;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_seconds: number | null;
+}
+
 // API Methods
 export const api = {
   async getHealth(): Promise<APIResponse<HealthDTO>> {
@@ -141,4 +226,46 @@ export const api = {
     );
     return res.data;
   },
+
+  // Sequential Workflow API endpoints
+  async triggerWorkflow(scenarioName: string, objective?: string, executionMode: string = "MOCK"): Promise<any> {
+    const res = await apiClient.post("/workflows", {
+      scenario_name: scenarioName,
+      objective: objective,
+      execution_mode: executionMode
+    });
+    return res.data;
+  },
+
+  async getWorkflows(): Promise<WorkflowCardDTO[]> {
+    const res = await apiClient.get<WorkflowCardDTO[]>("/workflows");
+    return res.data;
+  },
+
+  async getWorkflowContext(workflowId: string): Promise<SequentialWorkflowDTO> {
+    const res = await apiClient.get<SequentialWorkflowDTO>(`/workflows/${workflowId}`);
+    return res.data;
+  },
+
+  async getWorkflowTimeline(workflowId: string): Promise<TimelineCardDTO[]> {
+    const res = await apiClient.get<TimelineCardDTO[]>(`/workflows/${workflowId}/timeline`);
+    return res.data;
+  },
+
+  async getLiveWorkflowState(workflowId: string): Promise<LiveWorkflowStateDTO> {
+    const res = await apiClient.get<LiveWorkflowStateDTO>(`/workflows/${workflowId}/state`);
+    return res.data;
+  },
+
+  async approveWorkflow(workflowId: string, approvalToken: string): Promise<any> {
+    const res = await apiClient.post(`/workflows/${workflowId}/approve`, {
+      approval_token: approvalToken
+    });
+    return res.data;
+  },
+
+  async getWorkflowMetrics(): Promise<WorkflowMetricsDTO> {
+    const res = await apiClient.get<WorkflowMetricsDTO>("/workflows/metrics/summary");
+    return res.data;
+  }
 };

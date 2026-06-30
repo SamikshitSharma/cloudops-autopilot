@@ -49,6 +49,43 @@ async def test_conflicting_recommendations_resolution():
 @pytest.mark.asyncio
 async def test_failure_simulations():
     """Verify correct step/workflow failures under mock scenario gates."""
+    from backend.app.database import SessionLocal
+    from backend.app.models.resource import Resource as DBResource
+    from backend.app.models.recommendation import Recommendation as DBRecommendation
+    with SessionLocal() as db:
+        res = db.query(DBResource).filter(DBResource.id == "vm-strict-01").first()
+        if res:
+            res.tags = {"env": "dev", "policy": "no-stop"}
+        else:
+            res = DBResource(
+                id="vm-strict-01",
+                provider_id="/subscriptions/000/providers/Microsoft.Compute/virtualMachines/vm-strict-01",
+                name="vm-strict-01",
+                type="VirtualMachine",
+                region="eastus",
+                status="running",
+                tags={"env": "dev", "policy": "no-stop"}
+            )
+            db.add(res)
+        db.query(DBRecommendation).filter(DBRecommendation.resource_id == "vm-strict-01").delete()
+        
+        fail_res = db.query(DBResource).filter(DBResource.id == "vm-fail-01").first()
+        if fail_res:
+            fail_res.tags = {"Environment": "Dev"}
+        else:
+            fail_res = DBResource(
+                id="vm-fail-01",
+                provider_id="/subscriptions/000/providers/Microsoft.Compute/virtualMachines/vm-fail-01",
+                name="vm-fail-01",
+                type="VirtualMachine",
+                region="eastus",
+                status="running",
+                tags={"Environment": "Dev"}
+            )
+            db.add(fail_res)
+            
+        db.commit()
+            
     coordinator = WorkflowCoordinator()
     
     # 1. Missing Telemetry

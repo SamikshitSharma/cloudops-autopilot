@@ -73,3 +73,17 @@ class ApprovalDTO(BaseModel):
 class HealthDTO(BaseModel):
     status: str = Field(..., description="Status of the application service")
     database: str = Field(..., description="Database connectivity verification status")
+
+class AgentReasoningPathDTO(BaseModel):
+    id: str
+    timestamp: datetime
+    resource_id: Optional[str] = None
+    agent_name: str
+    trigger_event: str
+    observations: Dict[str, Any]
+    hypotheses: List[Dict[str, Any]]
+    policy_check_status: str
+    recommended_action: str
+
+    class Config:
+        from_attributes = True
