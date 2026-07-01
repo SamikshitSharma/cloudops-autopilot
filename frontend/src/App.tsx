@@ -8,6 +8,7 @@ import { Recommendations } from "./views/Recommendations";
 import { Approvals } from "./views/Approvals";
 import { Explainability } from "./views/Explainability";
 import { AuditLogs } from "./views/AuditLogs";
+import { EventBus } from "./views/EventBus";
 import { useWorkflow } from "./hooks/useWorkflow";
 
 function App() {
@@ -76,6 +77,8 @@ function App() {
         );
       case "explainability":
         return <Explainability recommendations={recommendations} />;
+      case "eventbus":
+        return <EventBus runs={runsDetails} activeRunDetails={runDetails} />;
       case "audit":
         return <AuditLogs runs={runsDetails} refresh={refresh} />;
       default:

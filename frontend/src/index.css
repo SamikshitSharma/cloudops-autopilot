@@ -107,74 +107,141 @@
 
 /* Custom Minimalist Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--border));
-  border-radius: var(--radius);
+  background-color: hsl(var(--border) / 0.8);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: hsl(var(--muted-foreground) / 0.4);
+  background-color: hsl(var(--primary) / 0.5);
 }
 
-/* Stripe/Linear style grid and dot overlay patterns */
+/* Glassmorphism panels */
+.glass-panel {
+  background: hsl(var(--card) / 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid hsl(var(--border) / 0.6);
+  box-shadow: var(--shadow-glass);
+}
+
+.glass-panel-glow {
+  background: linear-gradient(135deg, hsl(var(--card) / 0.85) 0%, hsl(var(--card) / 0.6) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid hsl(var(--primary) / 0.15);
+  box-shadow: 0 8px 30px 0 rgba(30, 102, 245, 0.05);
+}
+
+/* Dots and grids overlay */
 .bg-dot-pattern {
-  background-image: radial-gradient(hsl(var(--muted-foreground) / 0.08) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-image: radial-gradient(hsl(var(--foreground) / 0.04) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 .bg-grid-pattern {
-  background-image: linear-gradient(to right, hsl(var(--border) / 0.3) 1px, transparent 1px),
-                    linear-gradient(to bottom, hsl(var(--border) / 0.3) 1px, transparent 1px);
-  background-size: 32px 32px;
+  background-image: linear-gradient(to right, hsl(var(--border) / 0.25) 1px, transparent 1px),
+                    linear-gradient(to bottom, hsl(var(--border) / 0.25) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
-/* Motion system & physics curve definitions */
-.transition-spring-350 {
-  transition: all 350ms cubic-bezier(0.16, 1, 0.3, 1);
+/* Scanline / retro terminal look */
+.scanline-effect::after {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  z-index: 2;
+  background-size: 100% 3px, 3px 100%;
+  pointer-events: none;
 }
 
-.transition-spring-200 {
-  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-
-@keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 .fade-in-up {
-  animation: fade-in-up 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeInUp 400ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes slide-in-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+@keyframes slideInRight {
+  from {
+    transform: translateX(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
-
 .slide-in-right {
-  animation: slide-in-right 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideInRight 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+  }
+}
+.animate-pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.25, 0, 0, 1) infinite;
+}
+
+@keyframes success-glow {
+  0% {
+    box-shadow: 0 0 0 0 hsl(var(--success) / 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px hsl(var(--success) / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--success) / 0);
+  }
+}
+.animate-success-glow {
+  animation: success-glow 2.5s cubic-bezier(0.25, 0, 0, 1) infinite;
 }
 
 @keyframes approval-glow {
-  0% { box-shadow: 0 0 0 0 rgba(245, 166, 35, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(245, 166, 35, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(245, 166, 35, 0); }
+  0% { box-shadow: 0 0 0 0 hsl(var(--warning) / 0.5); }
+  70% { box-shadow: 0 0 0 10px hsl(var(--warning) / 0); }
+  100% { box-shadow: 0 0 0 0 hsl(var(--warning) / 0); }
 }
-
 .animate-approval-glow {
   animation: approval-glow 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
 @keyframes status-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.2); opacity: 0.4; }
+  50% { transform: scale(1.15); opacity: 0.5; }
 }
-
 .animate-status-pulse {
   animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* Premium gradient titles */
+.gradient-title {
+  background: linear-gradient(135deg, hsl(var(--foreground)) 30%, hsl(var(--primary)) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+

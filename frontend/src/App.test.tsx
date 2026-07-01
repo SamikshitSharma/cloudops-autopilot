@@ -49,6 +49,12 @@ vi.mock("lucide-react", () => ({
   ShieldAlert: () => <span>ShieldAlert</span>,
   CheckCircle2: () => <span>CheckCircle2</span>,
   AlertCircle: () => <span>AlertCircle</span>,
+  Bell: () => <span>Bell</span>,
+  ArrowUpDown: () => <span>ArrowUpDown</span>,
+  TrendingDown: () => <span>TrendingDown</span>,
+  LockOpen: () => <span>LockOpen</span>,
+  XCircle: () => <span>XCircle</span>,
+  Radio: () => <span>Radio</span>,
 }));
 
 vi.mock("recharts", () => ({
@@ -64,7 +70,9 @@ vi.mock("recharts", () => ({
   Legend: () => <div />,
   AreaChart: ({ children }: any) => <div data-testid="area-chart">{children}</div>,
   Area: () => <div />,
+  CartesianGrid: () => <div />,
 }));
+
 
 import { DashboardLayout } from "./components/DashboardLayout";
 import { Overview } from "./views/Overview";
@@ -80,7 +88,7 @@ describe("Dashboard UI Shell", () => {
     );
 
     // Verify system title & capstone credit
-    expect(screen.getByText("CloudOps")).toBeDefined();
+    expect(screen.getAllByText(/CloudOps/i)[0]).toBeDefined();
     expect(screen.getByText("Test Child")).toBeDefined();
     expect(screen.getByText("Kernel Uplink")).toBeDefined();
   });
