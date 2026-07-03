@@ -1,109 +1,45 @@
-import React, { useState, useEffect } from "react";
-import { DashboardLayout } from "./components/DashboardLayout";
-import { Overview } from "./views/Overview";
-import { WorkflowExecution } from "./views/WorkflowExecution";
-import { Inventory } from "./views/Inventory";
-import { Topology } from "./views/Topology";
-import { Recommendations } from "./views/Recommendations";
-import { Approvals } from "./views/Approvals";
-import { Explainability } from "./views/Explainability";
-import { AuditLogs } from "./views/AuditLogs";
-import { EventBus } from "./views/EventBus";
-import { useWorkflow } from "./hooks/useWorkflow";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import AppShell from "@/components/layout/AppShell";
+import Overview from "./pages/Overview";
+import Workflows from "./pages/Workflows";
+import Resources from "./pages/Resources";
+import Recommendations from "./pages/Recommendations";
+import Approvals from "./pages/Approvals";
+import Audit from "./pages/Audit";
+import Explainability from "./pages/Explainability";
+import Topology from "./pages/Topology";
+import Events from "./pages/Events";
+import NotFound from "./pages/NotFound";
 
-function App() {
-  const [currentTab, setCurrentTab] = useState("overview");
-  const {
-    runs,
-    runsDetails,
-    resources,
-    recommendations,
-    approvals,
-    activeRunId,
-    runDetails,
-    isLoading,
-    error,
-    triggerRun,
-    approve,
-    selectRun,
-    refresh
-  } = useWorkflow();
+const queryClient = new QueryClient();
 
-  // If a run starts, switch to workflow tab so the user sees it running in real-time!
-  useEffect(() => {
-    if (activeRunId) {
-      setCurrentTab("workflow");
-    }
-  }, [activeRunId]);
-
-  const renderContent = () => {
-    switch (currentTab) {
-      case "overview":
-        return (
-          <Overview 
-            runs={runs}
-            resources={resources}
-            recommendations={recommendations}
-            approvals={approvals}
-            activeRunDetails={runDetails}
-          />
-        );
-      case "inventory":
-        // Keep inventory view in compiler for tests, although hidden from navigation rail
-        return <Inventory resources={resources} />;
-      case "topology":
-        return <Topology resources={resources} recommendations={recommendations} activeRunDetails={runDetails} />;
-      case "recommendations":
-        return <Recommendations recommendations={recommendations} />;
-      case "workflow":
-        return (
-          <WorkflowExecution
-            runs={runs}
-            activeRunId={activeRunId}
-            runDetails={runDetails}
-            isLoading={isLoading}
-            error={error}
-            triggerRun={triggerRun}
-            selectRun={selectRun}
-          />
-        );
-      case "approvals":
-        return (
-          <Approvals
-            recommendations={recommendations}
-            approvals={approvals}
-            approve={approve}
-          />
-        );
-      case "explainability":
-        return <Explainability recommendations={recommendations} />;
-      case "eventbus":
-        return <EventBus runs={runsDetails} activeRunDetails={runDetails} />;
-      case "audit":
-        return <AuditLogs runs={runsDetails} refresh={refresh} />;
-      default:
-        return (
-          <Overview 
-            runs={runs}
-            resources={resources}
-            recommendations={recommendations}
-            approvals={approvals}
-            activeRunDetails={runDetails}
-          />
-        );
-    }
-  };
-
-  return (
-    <DashboardLayout 
-      currentTab={currentTab} 
-      setCurrentTab={setCurrentTab}
-      recommendations={recommendations}
-      activeRunDetails={runDetails}
-    >
-      {renderContent()}
-    </DashboardLayout>
-  );
-}
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider delayDuration={200}>
+      <Toaster />
+      <Sonner theme="dark" position="top-right" richColors />
+      <BrowserRouter>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/" element={<Overview />} />
+            <Route path="/workflows" element={<Workflows />} />
+            <Route path="/resources" element={<Resources />} />
+            <Route path="/recommendations" element={<Recommendations />} />
+            <Route path="/approvals" element={<Approvals />} />
+            <Route path="/audit" element={<Audit />} />
+            <Route path="/explainability" element={<Explainability />} />
+            <Route path="/topology" element={<Topology />} />
+            <Route path="/events" element={<Events />} />
+          </Route>
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
 
 export default App;
