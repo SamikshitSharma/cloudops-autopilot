@@ -21,7 +21,7 @@ export interface AggregatedMetrics {
   failure_rate: number;
   average_workflow_duration: number;
   average_stage_duration: Record<string, number>;
-  average_confidence: number;
+  average_confidence: number | null;
   estimated_total_savings: number;
   most_common_failure_reasons: Array<{ reason: string; count: number }>;
   azure_api_utilization_statistics: Record<string, number>;
@@ -54,7 +54,7 @@ export interface WorkflowHistoryItem {
   updated_at: string;
   progress_percentage: number;
   duration_seconds: number | null;
-  confidence: number;
+  confidence: number | null;
   estimated_savings: number;
 }
 

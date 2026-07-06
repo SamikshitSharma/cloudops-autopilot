@@ -20,9 +20,7 @@ interface Message {
 export function AIChatDialog({ open, onOpenChange }: Props) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "Hello! I am the Autopilot AI assistant. Ask me to summarize resources, summarize recommendations, explain workflows, or audit trails." }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -78,6 +76,11 @@ export function AIChatDialog({ open, onOpenChange }: Props) {
 
         <ScrollArea className="flex-1 pr-4">
           <div className="space-y-4">
+            {messages.length === 0 && !loading && (
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
+                Ask a question about any synchronized resource, recommendation, workflow, approval, or audit record. Answers are generated from the current backend state; if evidence is missing, the response will say so.
+              </div>
+            )}
             {messages.map((m, idx) => (
               <div key={idx} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap ${

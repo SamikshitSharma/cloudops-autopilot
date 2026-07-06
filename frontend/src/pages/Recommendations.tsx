@@ -57,7 +57,7 @@ export default function Recommendations() {
         impact: r.rationale,
         resource: r.resource_id,
         status: r.status,
-        confidence: r.confidence_score !== null && r.confidence_score !== undefined ? r.confidence_score : 1.0,
+        confidence: r.confidence_score !== null && r.confidence_score !== undefined ? r.confidence_score : null,
         createdAt: "Active",
         evidence: r.evidence,
         reasoning_chain: r.reasoning_chain,
@@ -157,7 +157,7 @@ export default function Recommendations() {
                       <span className="font-mono text-xs text-muted-foreground">Target: {r.resource}</span>
                       {r.savings && <Badge className="bg-success/15 text-success hover:bg-success/20">{r.savings}</Badge>}
                       <span className="ml-auto inline-flex items-center gap-1 text-xs text-primary">
-                        <Sparkles className="h-3 w-3" /> {Math.round(r.confidence * 100)}% confidence
+                        <Sparkles className="h-3 w-3" /> {r.confidence === null ? "No Data" : `${Math.round(r.confidence * 100)}% confidence`}
                       </span>
                     </div>
                     {r.status === "pending" || r.status === "escalated" ? (
@@ -227,7 +227,7 @@ export default function Recommendations() {
                 </div>
                 <div>
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-0.5">AI Confidence</span>
-                  <p className="text-primary font-bold text-base">{Math.round(previewReco.confidence * 100)}%</p>
+                  <p className="text-primary font-bold text-base">{previewReco.confidence === null ? "No Data" : `${Math.round(previewReco.confidence * 100)}%`}</p>
                 </div>
                 <div>
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-0.5">Risk Level</span>
@@ -298,7 +298,7 @@ export default function Recommendations() {
                       <div key={agent} className="border-l-2 border-primary/50 pl-2.5 py-0.5">
                         <div className="flex justify-between items-center text-[10px] uppercase font-bold text-primary/80 mb-0.5">
                           <span>{agent} Stage</span>
-                          {data.confidence !== undefined && <span>{Math.round(data.confidence * 100)}% conf</span>}
+                          {typeof data.confidence === "number" && <span>{Math.round(data.confidence * 100)}% conf</span>}
                         </div>
                         {typeof data === "object" ? (
                           <div className="text-[11px] text-foreground/80 space-y-0.5">

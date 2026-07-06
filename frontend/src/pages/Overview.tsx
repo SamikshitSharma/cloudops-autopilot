@@ -104,7 +104,7 @@ export default function Overview() {
       },
       {
         id: "workflows",
-        label: "Total Workflows",
+        label: "Historical Workflows",
         value: metrics.total_workflow_executions.toLocaleString(),
         delta: 0,
         sparkline: [1, 1, 1],
@@ -244,7 +244,7 @@ export default function Overview() {
               Your <span className="text-gradient">governed cloud</span>, at a glance.
             </h2>
             <p className="mt-3 max-w-xl text-sm text-muted-foreground md:text-base">
-              A 9-stage AI agent pipeline observes synchronized Azure state, reasons over recorded evidence, and routes high-impact changes through human approval.
+              A 9-stage AI agent pipeline observes synchronized Azure state, reasons over recorded evidence, and routes high-impact changes through human approval. Workflow totals are historical persisted runs, not current-session counters.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -279,7 +279,7 @@ export default function Overview() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="font-display text-base font-semibold">Recent Workflow Runs</h3>
-                <p className="text-xs text-muted-foreground">Latest orchestration activity and pipeline health</p>
+                <p className="text-xs text-muted-foreground">Latest persisted orchestration history; counts are historical for the selected cloud mode</p>
               </div>
               <Badge variant="outline" className="uppercase font-semibold tracking-wider text-xs border-primary/45 text-primary">
                 {health?.data?.cloud_mode || "MOCK"}
@@ -335,7 +335,7 @@ export default function Overview() {
                               {wf.execution_mode}
                             </Badge>
                           </TableCell>
-                          <TableCell className="font-mono text-xs">{(wf.confidence * 100).toFixed(2)}%</TableCell>
+                          <TableCell className="font-mono text-xs">{wf.confidence === null ? "No Data" : `${(wf.confidence * 100).toFixed(2)}%`}</TableCell>
                           <TableCell className="font-mono text-xs text-success">
                             ${wf.estimated_savings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>

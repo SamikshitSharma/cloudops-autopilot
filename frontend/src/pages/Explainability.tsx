@@ -23,14 +23,14 @@ export default function Explainability() {
       items.push({
         name: "Analysis Finding",
         displayValue: obs.analysis_finding,
-        weight: obs.analysis_confidence ?? 0.95,
+        weight: typeof obs.analysis_confidence === "number" ? obs.analysis_confidence : null,
       });
     }
     if (obs.estimated_monthly_savings) {
       items.push({
         name: "Estimated Monthly Savings",
         displayValue: `$${obs.estimated_monthly_savings}/mo`,
-        weight: obs.estimated_monthly_savings > 100 ? 0.9 : obs.estimated_monthly_savings / 120,
+        weight: null,
       });
     }
     if (obs.compliance_gate) {
@@ -39,18 +39,13 @@ export default function Explainability() {
       items.push({
         name: "Compliance Gate Status",
         displayValue: desc,
-        weight: gate.compliant ? 0.95 : 0.25,
+        weight: null,
       });
     }
     
     Object.entries(obs).forEach(([key, val]) => {
       if (["analysis_finding", "analysis_confidence", "estimated_monthly_savings", "compliance_gate", "resource_id"].includes(key)) return;
-      let weight = 0.5;
-      if (typeof val === "number") {
-        if (val <= 1) weight = val;
-        else if (val <= 100) weight = val / 100;
-        else weight = 0.85;
-      }
+      const weight = typeof val === "number" && val >= 0 && val <= 1 ? val : null;
       items.push({
         name: key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
         displayValue: typeof val === "object" ? JSON.stringify(val) : String(val),
@@ -85,7 +80,7 @@ export default function Explainability() {
     );
   }
 
-  const confidence = latestPath.hypotheses[0]?.confidence ?? latestPath.hypotheses[0]?.confidence_score ?? 0;
+  const confidence = latestPath.hypotheses[0]?.confidence ?? latestPath.hypotheses[0]?.confidence_score ?? null;
 
   return (
     <div className="space-y-6 animate-in-up">
@@ -113,7 +108,8 @@ export default function Explainability() {
           </div>
           <div className="text-right shrink-0">
             <p className="text-xs uppercase tracking-widest text-muted-foreground">Confidence</p>
-            <p className="font-display text-4xl font-semibold text-gradient">{Math.round(confidence * 100)}%</p>
+            <p className="font-display text-4xl font-semibold text-gradient">{confidence === null ? "No Data" : `${Math.round(confidence * 100)}%`}</p>
+            <p className="mt-1 max-w-40 text-[10px] text-muted-foreground">{confidence === null ? "No confidence calculation was persisted." : "Recorded from the persisted reasoning hypothesis."}</p>
           </div>
         </div>
       </Card>
@@ -130,13 +126,13 @@ export default function Explainability() {
                   <div className="flex items-center justify-between text-sm font-semibold">
                     <span className="truncate max-w-[70%] text-foreground" title={f.name}>{f.name}</span>
                     <span className="font-mono text-[11px] text-primary shrink-0">
-                      Weight: {Math.round(f.weight * 100)}%
+                      {f.weight === null ? "No computed weight" : `Recorded: ${Math.round(f.weight * 100)}%`}
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground break-words mt-1 mb-2 leading-relaxed bg-muted/10 p-1.5 rounded font-mono border border-border/40">
                     {f.displayValue}
                   </div>
-                  <Progress value={f.weight * 100} className="h-1" />
+                  {f.weight !== null && <Progress value={f.weight * 100} className="h-1" />}
                 </li>
               ))}
             </ul>

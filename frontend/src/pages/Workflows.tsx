@@ -11,6 +11,8 @@ import {
   useWorkflows,
   useWorkflowDetails,
   useTriggerWorkflow,
+  useLiveWorkflowState,
+  useWorkflowReplay,
   usePauseWorkflow,
   useResumeWorkflow,
   useRerunWorkflow,
@@ -47,6 +49,8 @@ export default function Workflows() {
   }, [workflowIdParam, workflows]);
 
   const { data: wfDetails, isLoading: isDetailsLoading, refetch: refetchDetails } = useWorkflowDetails(activeWfId);
+  const { data: liveState } = useLiveWorkflowState(activeWfId);
+  const { data: replay } = useWorkflowReplay(activeWfId);
   const pauseWorkflow = usePauseWorkflow(activeWfId);
   const resumeWorkflow = useResumeWorkflow(activeWfId);
   const rerunWorkflow = useRerunWorkflow(activeWfId);
@@ -62,7 +66,10 @@ export default function Workflows() {
       let outputs: string[] = [];
 
       if (dbStage) {
-        if (dbStage.status === "success") status = "complete";
+        const liveCurrent = liveState?.current_stage === tmpl.key;
+        const liveCompleted = liveState?.completed_stages?.includes(tmpl.key);
+        if (liveCurrent) status = "running";
+        else if (dbStage.status === "success" || liveCompleted) status = "complete";
         else if (dbStage.status === "pending") status = "queued";
         else status = dbStage.status as any;
 
@@ -82,7 +89,7 @@ export default function Workflows() {
 
       return { ...tmpl, status, durationMs, confidence, outputs };
     });
-  }, [wfDetails]);
+  }, [wfDetails, liveState]);
 
   const selectedStage = useMemo(() => {
     return stages.find((s) => s.key === selectedKey) || stages[0];
@@ -150,10 +157,10 @@ ${JSON.stringify(dbStageSelected.llm_trace, null, 2)}`;
 
   const handleTriggerRun = () => {
     triggerWorkflow.mutate(
-      { scenario_name: "idle_vm", objective: "Optimize Idle Virtual Compute Instances", execution_mode: "MOCK" },
+      { scenario_name: "idle_vm", objective: "Optimize Idle Virtual Compute Instances" },
       {
         onSuccess: (res) => {
-          toast.success("New autonomous multi-agent reasoning sweep triggered successfully!");
+          toast.success("New backend workflow run triggered successfully.");
           if (res.workflow_id) {
             setSearchParams({ id: res.workflow_id });
             refetchDetails();
@@ -341,6 +348,21 @@ ${JSON.stringify(dbStageSelected.llm_trace, null, 2)}`;
               </div>
             </TabsContent>
           </Tabs>
+          {replay?.events && replay.events.length > 0 && (
+            <div className="mt-4 rounded-md border border-border bg-black/30 p-3">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Backend event replay</p>
+              <div className="max-h-32 space-y-1 overflow-auto font-mono text-[10px] text-foreground/80">
+                {replay.events.slice(-12).map((ev, idx) => (
+                  <div key={`${ev.event_type}-${idx}`} className="flex gap-2">
+                    <span className="text-muted-foreground">{new Date(ev.timestamp).toLocaleTimeString()}</span>
+                    <span className="text-primary">{ev.stage_id || "workflow"}</span>
+                    <span>{ev.event_type}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
         </Card>
       </div>
     </div>

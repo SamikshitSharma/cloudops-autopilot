@@ -91,15 +91,17 @@ export default function Topology() {
     if (!topology?.infrastructure?.nodes) return [];
     const nodes = topology.infrastructure.nodes;
     
-    // Sort by type to layer them: VM (Web) -> SQL/Vault (Data) -> Disk (Storage)
-    const vmNodes = nodes.filter(n => n.type === "VM" || n.type === "AppService" || n.type === "LoadBalancer");
-    const dataNodes = nodes.filter(n => n.type === "Database" || n.type === "KeyVault");
-    const storageNodes = nodes.filter(n => !vmNodes.includes(n) && !dataNodes.includes(n));
+    const isCompute = (n: TopologyNode) => (n.type || "").toLowerCase().includes("compute") || (n.type || "").toLowerCase().includes("networkinterfaces") || (n.type || "").toLowerCase().includes("publicip");
+    const isData = (n: TopologyNode) => (n.type || "").toLowerCase().includes("sql") || (n.type || "").toLowerCase().includes("keyvault");
+    const isStorage = (n: TopologyNode) => (n.type || "").toLowerCase().includes("storage") || (n.type || "").toLowerCase().includes("disk");
+    const vmNodes = nodes.filter(isCompute);
+    const dataNodes = nodes.filter(isData);
+    const storageNodes = nodes.filter(n => isStorage(n) || (!vmNodes.includes(n) && !dataNodes.includes(n)));
     
     const layout: (TopologyNode & { x: number; y: number })[] = [];
     const width = 800;
     
-    // Layer 1: Compute (y = 80)
+    // Layer 1: Compute and public ingress (y = 80)
     vmNodes.forEach((n, idx) => {
       const x = vmNodes.length > 1 ? 80 + (idx * (width - 160)) / (vmNodes.length - 1) : width / 2;
       layout.push({ ...n, x, y: 80 });
@@ -118,7 +120,7 @@ export default function Topology() {
     });
     
     return layout;
-  }, [topology, view]);
+  }, [topology]);
 
   // Node position helper for Agents
   const agentNodesWithCoords = useMemo(() => {
@@ -134,7 +136,7 @@ export default function Topology() {
     });
     
     return layout;
-  }, [topology, view]);
+  }, [topology]);
 
   if (isLoading) {
     return <LoadingState label="Constructing service dependency maps…" />;
@@ -165,24 +167,18 @@ export default function Topology() {
   const getIcon = (type?: string) => {
     if (!type) return <HelpCircle className="h-4 w-4 text-muted-foreground" />;
     const t = type.toLowerCase();
-    // Compute
-    if (t === "vm" || t === "appservice" || t === "nic") return <Cpu className="h-4 w-4 text-info" />;
-    if (t === "loadbalancer") return <Server className="h-4 w-4 text-info" />;
-    // Data
-    if (t === "database") return <Database className="h-4 w-4 text-warning" />;
-    if (t === "keyvault") return <Lock className="h-4 w-4 text-warning" />;
-    // Storage
-    if (t === "storage" || t === "disk") return <HardDrive className="h-4 w-4 text-muted-foreground" />;
-    // Network
-    if (t === "vnet" || t === "subnet") return <Network className="h-4 w-4 text-primary" />;
-    if (t === "nsg") return <ShieldCheck className="h-4 w-4 text-success" />;
-    if (t === "publicip") return <Globe className="h-4 w-4 text-muted-foreground" />;
-    // Agents
+    if (t.includes("virtualmachines") || t.includes("networkinterfaces")) return <Cpu className="h-4 w-4 text-info" />;
+    if (t.includes("publicip") || t.includes("virtualnetworks") || t.includes("networksecuritygroups")) return <Network className="h-4 w-4 text-primary" />;
+    if (t.includes("serverfarms")) return <Server className="h-4 w-4 text-info" />;
+    if (t.includes("sql")) return <Database className="h-4 w-4 text-warning" />;
+    if (t.includes("keyvault")) return <Lock className="h-4 w-4 text-warning" />;
+    if (t.includes("storage") || t.includes("disk")) return <HardDrive className="h-4 w-4 text-muted-foreground" />;
     if (t === "agent") return <BotMessageSquare className="h-4 w-4 text-primary" />;
-    // Cloud generic
-    if (t === "cloud") return <Cloud className="h-4 w-4 text-info" />;
+    if (t.includes("subscription") || t.includes("resourcegroup")) return <Cloud className="h-4 w-4 text-info" />;
     return <HelpCircle className="h-4 w-4 text-muted-foreground" />;
   };
+
+  const shortLabel = (label: string) => label.length > 24 ? `${label.slice(0, 21)}...` : label;
 
   return (
     <div className="space-y-6 animate-in-up">
@@ -224,7 +220,7 @@ export default function Topology() {
             <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-destructive animate-pulse" /> Failure / Degraded</div>
           </div>
           
-          <svg viewBox="0 0 900 400" className="w-full h-full max-h-[400px]">
+          <svg viewBox="0 0 900 440" className="w-full h-full max-h-[440px]">
             {/* Draw Edges */}
             {view === "infrastructure" && topology?.infrastructure?.edges.map((e, idx) => {
               const srcNode = infraNodesWithCoords.find(n => n.id === e.source);
@@ -291,14 +287,11 @@ export default function Topology() {
                       {getIcon(n.type)}
                     </div>
                   </foreignObject>
-                  <text 
-                    x={n.x} 
-                    y={n.y + 36} 
-                    textAnchor="middle" 
-                    className="font-mono text-[10px] fill-foreground font-semibold"
-                  >
-                    {n.label}
-                  </text>
+                  <foreignObject x={n.x - 58} y={n.y + 28} width="116" height="42" className="pointer-events-none">
+                    <div className="rounded bg-background/80 px-1 text-center font-mono text-[9px] font-semibold leading-tight text-foreground shadow-sm">
+                      {shortLabel(n.label)}
+                    </div>
+                  </foreignObject>
                 </g>
               );
             })}
@@ -319,14 +312,11 @@ export default function Topology() {
                       {n.label.slice(0, 2).toUpperCase()}
                     </div>
                   </foreignObject>
-                  <text 
-                    x={n.x} 
-                    y={n.y + 38} 
-                    textAnchor="middle" 
-                    className="font-display text-[9.5px] fill-foreground font-semibold max-w-[80px]"
-                  >
-                    {n.label.split(" ")[0]}
-                  </text>
+                  <foreignObject x={n.x - 42} y={n.y + 30} width="84" height="36" className="pointer-events-none">
+                    <div className="rounded bg-background/80 px-1 text-center font-display text-[9px] font-semibold leading-tight text-foreground shadow-sm">
+                      {shortLabel(n.label)}
+                    </div>
+                  </foreignObject>
                 </g>
               );
             })}

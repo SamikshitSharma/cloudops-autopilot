@@ -75,7 +75,7 @@ export function PipelineTimeline({
                   )}
                 </div>
                 <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{stage.description}</p>
-                {stage.confidence > 0 && (
+                {typeof stage.confidence === "number" && stage.confidence > 0 && (
                   <div className="mt-2 flex items-center gap-2">
                     <Progress value={stage.confidence * 100} className="h-1 flex-1" />
                     <span className="font-mono text-[10px] text-muted-foreground">{Math.round(stage.confidence * 100)}%</span>

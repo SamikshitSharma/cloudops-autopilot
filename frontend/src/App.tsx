@@ -28,12 +28,12 @@ const SweepProgressOverlay = () => {
     refetchInterval: 2000,
   });
 
-  const activeWf = workflows.find(
-    (wf) =>
-      wf.status === "running" ||
-      wf.status === "pending" ||
-      wf.status === "blocked_on_approval"
-  );
+  const activeWf = workflows.find((wf) => {
+    const isActive = wf.status === "running" || wf.status === "pending" || wf.status === "blocked_on_approval";
+    const updatedAt = wf.updated_at ? new Date(wf.updated_at).getTime() : 0;
+    const recentlyUpdated = updatedAt > 0 && Date.now() - updatedAt < 5 * 60 * 1000;
+    return isActive && recentlyUpdated;
+  });
 
   if (!activeWf) return null;
 
@@ -42,17 +42,17 @@ const SweepProgressOverlay = () => {
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-primary animate-ping" />
-          Autonomous Sweep Active
+          Workflow In Progress
         </span>
         <span className="font-mono text-[9px] text-muted-foreground">Run #{activeWf.workflow_id.slice(0, 8)}</span>
       </div>
       <div className="space-y-1">
-        <p className="text-xs font-semibold text-foreground truncate">{activeWf.objective || "Remediating resources..."}</p>
+        <p className="text-xs font-semibold text-foreground truncate">{activeWf.objective || "Awaiting backend workflow state..."}</p>
         <p className="text-[10px] text-muted-foreground capitalize">Status: {activeWf.status.replace(/_/g, " ")}</p>
       </div>
       <div className="space-y-1">
         <div className="flex justify-between text-[9px] font-mono text-muted-foreground">
-          <span>Progress</span>
+          <span>Backend progress</span>
           <span>{Math.round(activeWf.progress_percentage)}%</span>
         </div>
         <div className="h-1.5 w-full bg-muted/30 rounded-full overflow-hidden">

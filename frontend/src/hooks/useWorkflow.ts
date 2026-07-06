@@ -13,7 +13,7 @@ export interface WorkflowCard {
   updated_at: string;
   progress_percentage: number;
   duration_seconds: number | null;
-  confidence: number;
+  confidence: number | null;
   estimated_savings: number;
 }
 
@@ -28,7 +28,7 @@ export interface WorkflowStage {
   input_summary: any;
   output_summary: any;
   reasoning_summary: any;
-  confidence: number;
+  confidence: number | null;
   errors: any;
   llm_trace: any;
 }
@@ -62,6 +62,20 @@ export interface LiveWorkflowState {
   current_reasoning_summary: string | null;
   correlation_id: string;
   execution_mode: string;
+}
+
+export interface WorkflowReplayEvent {
+  event_type: string;
+  timestamp: string;
+  stage_id: string | null;
+  payload: any;
+}
+
+export interface WorkflowReplay {
+  workflow_id: string;
+  run_id: string;
+  status: string;
+  events: WorkflowReplayEvent[];
 }
 
 export interface TriggerWorkflowRequest {
@@ -99,7 +113,7 @@ export function useWorkflowDetails(workflowId: string | null) {
     refetchInterval: (query) => {
       const data = query.state.data;
       if (data && (data.status === "running" || data.status === "pending" || data.status === "blocked_on_approval")) {
-        return 2000;
+        return 750;
       }
       return false;
     },
@@ -115,11 +129,21 @@ export function useLiveWorkflowState(workflowId: string | null) {
     refetchInterval: (query) => {
       const data = query.state.data;
       if (data && (data.status === "running" || data.status === "pending" || data.status === "blocked_on_approval")) {
-        return 2000;
+        return 750;
       }
       return false;
     },
-    staleTime: 5000,
+    staleTime: 1000,
+  });
+}
+
+export function useWorkflowReplay(workflowId: string | null) {
+  return useQuery<WorkflowReplay>({
+    queryKey: ["workflowReplay", workflowId],
+    queryFn: () => api.get<WorkflowReplay>(`/api/v1/workflows/${workflowId}/replay`),
+    enabled: !!workflowId,
+    refetchInterval: 1000,
+    staleTime: 1000,
   });
 }
 
@@ -132,6 +156,7 @@ export function useTriggerWorkflow() {
       queryClient.invalidateQueries({ queryKey: ["workflows"] });
       queryClient.invalidateQueries({ queryKey: ["workflowHistory"] });
       queryClient.invalidateQueries({ queryKey: ["workflowMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["topology"] });
       queryClient.invalidateQueries({ queryKey: ["recommendations"] });
       queryClient.invalidateQueries({ queryKey: ["approvals"] });
       queryClient.invalidateQueries({ queryKey: ["resources"] });
