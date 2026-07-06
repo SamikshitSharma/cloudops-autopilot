@@ -82,7 +82,7 @@ def reconcile_state():
         reconciled = 0
         
         # 1. Sync Run.status from SequentialWorkflow.status for all workflows
-        workflows = db.query(SequentialWorkflow).all()
+        workflows = db.query(SequentialWorkflow).order_by(SequentialWorkflow.created_at.desc()).all()
         for wf in workflows:
             db_run = db.query(DBRun).filter(DBRun.id == wf.run_id).first()
             if not db_run:
@@ -492,17 +492,36 @@ def _enrich_resource_dto(r: DBResource) -> dict:
     })
 
     resource_type = r.type.lower()
-    supports_cpu = "virtualmachine" in resource_type or "serverfarms" in resource_type
+    supports_cpu = "virtualmachines" in resource_type or "serverfarms" in resource_type
+    supports_network = any(key in resource_type for key in ["virtualmachines", "networkinterfaces", "publicipaddresses", "virtualnetworks"])
+    supports_storage = any(key in resource_type for key in ["storageaccounts", "disks"])
+
     if latest_telemetry and supports_cpu:
         cpu = round(latest_telemetry.cpu_percent, 1)
         dto["utilization"] = cpu
         dto["cpu_utilization"] = cpu
         dto["metric_source"] = "Azure Monitor"
-        dto["telemetry_explanation"] = "CPU utilization is the latest persisted Azure Monitor sample."
+        dto["telemetry_explanation"] = "CPU utilization is the latest persisted Azure Monitor sample for this compute resource."
+        if latest_telemetry.network_in_bytes is not None or latest_telemetry.network_out_bytes is not None:
+            dto["network_utilization"] = float((latest_telemetry.network_in_bytes or 0) + (latest_telemetry.network_out_bytes or 0))
     elif supports_cpu:
-        dto["telemetry_explanation"] = "Azure Monitor returned no CPU samples for this resource."
+        dto["metric_source"] = "Azure Monitor"
+        dto["telemetry_explanation"] = "Azure Monitor did not return persisted CPU samples for this compute resource in the current telemetry window."
+    elif supports_storage:
+        dto["metric_source"] = "Azure Resource Inventory"
+        dto["telemetry_explanation"] = "Capacity/transaction metrics are resource-specific for storage and are not yet persisted in telemetry_history; inventory status is shown instead."
+    elif supports_network:
+        dto["metric_source"] = "Azure Resource Inventory"
+        dto["telemetry_explanation"] = "Network throughput metrics require Azure Monitor metric collection for this network resource; inventory status is shown instead."
+    elif "keyvault" in resource_type:
+        dto["metric_source"] = "Azure Resource Inventory"
+        dto["telemetry_explanation"] = "Key Vault availability/request metrics are not persisted locally; inventory status and policy evidence are shown instead."
+    elif "sql" in resource_type:
+        dto["metric_source"] = "Azure Resource Inventory"
+        dto["telemetry_explanation"] = "SQL DTU/vCore metrics are not persisted locally; inventory status is shown instead."
     else:
-        dto["telemetry_explanation"] = "CPU utilization is not an applicable metric for this Azure resource type."
+        dto["metric_source"] = "Azure Resource Inventory"
+        dto["telemetry_explanation"] = "No resource-specific telemetry collector is configured for this Azure resource type; inventory status is shown instead."
 
     status = (r.status or "unknown").lower()
     if status in {"running", "available", "active", "ready", "ok", "discovered", "online"}:
@@ -1095,6 +1114,54 @@ def _build_execution_plan(db: Session, reco: DBRecommendation) -> Dict[str, Any]
 
 def fallback_rule_based_ai(query: str, resources, recommendations, workflows, audit_logs, selected_resource_id: Optional[str] = None, context_url: Optional[str] = None) -> str:
     q = query.lower()
+
+    def normalize(value: str) -> str:
+        return "".join(ch.lower() for ch in value if ch.isalnum())
+
+    normalized_query = normalize(query)
+    explicit_resource = None
+    if selected_resource_id:
+        explicit_resource = next((x for x in resources if x.id == selected_resource_id or x.name == selected_resource_id), None)
+    if not explicit_resource and normalized_query:
+        explicit_resource = next(
+            (
+                x for x in resources
+                if normalize(x.id) in normalized_query
+                or normalize(x.name) in normalized_query
+                or (x.provider_id and normalize(x.provider_id) in normalized_query)
+            ),
+            None,
+        )
+
+    if explicit_resource:
+        related_recos = [r for r in recommendations if r.resource_id == explicit_resource.id]
+        related_audit = [a for a in audit_logs if explicit_resource.id in str(a.payload) or explicit_resource.name in str(a.payload)][:5]
+        latest_workflow = workflows[0] if workflows else None
+        resource_type = (explicit_resource.type or "").lower()
+        if "virtualmachines" in resource_type or resource_type.endswith("/vm"):
+            telemetry_note = "Azure Monitor CPU samples are collected when available; network counters are shown only when persisted telemetry exists."
+        elif "storage" in resource_type:
+            telemetry_note = "Inventory state is synchronized; capacity and transaction metrics require Azure Monitor metric ingestion and are reported as missing when not persisted."
+        elif "network" in resource_type:
+            telemetry_note = "Network inventory is synchronized; throughput/flow metrics require explicit Monitor or flow-log ingestion and are reported as missing when absent."
+        elif "keyvault" in resource_type:
+            telemetry_note = "Key Vault inventory is synchronized; request and availability metrics require Monitor ingestion and are reported as missing when absent."
+        elif "sql" in resource_type:
+            telemetry_note = "SQL inventory is synchronized; DTU/vCore utilization requires database metric ingestion and is reported as missing when absent."
+        elif "resourcegroups" in resource_type:
+            telemetry_note = "Resource group state comes from Azure Resource Graph/ARM inventory; resource groups do not expose CPU or utilization telemetry directly."
+        else:
+            telemetry_note = "Inventory state is synchronized; no resource-specific telemetry collector has persisted utilization metrics for this resource type."
+        reco_lines = [f"- {r.id}: {r.action_type.upper()} ({r.status}) - {r.rationale}" for r in related_recos] or ["- No recommendation currently targets this resource."]
+        audit_lines = [f"- {a.timestamp}: {a.event_type} ({a.status})" for a in related_audit] or ["- No recent audit entries reference this resource."]
+        return (
+            f"Resource '{explicit_resource.name}' ({explicit_resource.id}) is recorded as {explicit_resource.type} in {explicit_resource.region} with status '{explicit_resource.status}'.\n"
+            f"Provider ID: {explicit_resource.provider_id}\n"
+            f"Telemetry: {telemetry_note}\n"
+            f"Latest workflow in scope: {latest_workflow.id if latest_workflow else 'none recorded'}.\n"
+            f"Recommendations:\n" + "\n".join(reco_lines) + "\n"
+            f"Audit evidence:\n" + "\n".join(audit_lines)
+        )
     
     # Context-aware fallback: if the user asks a generic "why" or "what is this" or "explain" while selecting a resource
     if selected_resource_id and ("why" in q or "explain" in q or "detail" in q or "what is" in q or "describe" in q):
@@ -1232,6 +1299,28 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
             )
         return "I analyzed the resources but couldn't find any currently flagged as idle or underutilized in the active recommendations database."
 
+    if "approval" in q or "risk" in q or "governance" in q:
+        pending_approvals = [r for r in recommendations if r.status in {"pending", "escalated"} and (r.risk_level == "high" or r.action_type in {"delete", "resize"})]
+        high_risk = [r for r in recommendations if r.risk_level == "high"]
+        active_workflows = [w for w in workflows if w.status in {"running", "pending", "blocked_on_approval"}]
+        latest_workflow = workflows[0] if workflows else None
+        lines = [
+            "Governance and risk evidence from the backend:",
+            f"- Pending approval candidates: {len(pending_approvals)}.",
+            f"- High-risk recommendations recorded: {len(high_risk)}.",
+            f"- Active workflow runs: {len(active_workflows)}.",
+            f"- Total workflow history in AI scope: {len(workflows)} run(s).",
+        ]
+        if pending_approvals:
+            lines.extend(f"- Approval candidate {r.id}: {r.action_type} on {r.resource_id}, status {r.status}, risk {r.risk_level}." for r in pending_approvals[:5])
+        else:
+            lines.append("- No approval-blocked or high-risk pending recommendation is currently recorded.")
+        if latest_workflow:
+            lines.append(f"- Latest workflow: {latest_workflow.id} is {latest_workflow.status}; objective: {latest_workflow.objective or 'not recorded'}.")
+        if audit_logs:
+            latest_audit = audit_logs[0]
+            lines.append(f"- Latest audit event: {latest_audit.timestamp} {latest_audit.event_type} by {latest_audit.agent_name} ({latest_audit.status}).")
+        return "\n".join(lines)
     if "workflow" in q:
         wf_summary = [f"- Run {w.id}: objective '{w.objective}' is {w.status}" for w in workflows]
         return "Here is a summary of the multi-agent orchestrator workflows:\n" + ("\n".join(wf_summary) if wf_summary else "No workflow runs recorded in history.")
@@ -1239,16 +1328,43 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
         audit_summary = [f"- {a.timestamp.strftime('%H:%M:%S')} | {a.agent_name} | {a.event_type} ({a.status})" for a in audit_logs[:10]]
         return "Here is a summary of the latest audit ledger records:\n" + ("\n".join(audit_summary) if audit_summary else "Audit ledger is currently empty.")
         
-    return (
-        f"I am the CloudOps Autopilot AI Assistant. I have context on {len(resources)} synchronized resources, "
-        f"{len(recommendations)} optimization proposals, and {len(workflows)} workflow runs.\n"
-        f"You can ask me questions like:\n"
-        f"- 'Why is this VM stopped?'\n"
-        f"- 'What changed today?'\n"
-        f"- 'Explain the last workflow.'\n"
-        f"- 'Which recommendation saves the most money?'\n"
-        f"- 'Summarize today's activity.'"
+    resource_types = {}
+    for resource in resources:
+        resource_types[resource.type] = resource_types.get(resource.type, 0) + 1
+    recommendation_statuses = {}
+    for reco in recommendations:
+        recommendation_statuses[reco.status] = recommendation_statuses.get(reco.status, 0) + 1
+    workflow_statuses = {}
+    for workflow in workflows:
+        workflow_statuses[workflow.status] = workflow_statuses.get(workflow.status, 0) + 1
+
+    latest_workflow = workflows[0] if workflows else None
+    latest_audit = audit_logs[0] if audit_logs else None
+    active_recommendations = [r for r in recommendations if r.status in {"pending", "approved"}]
+    realized_savings = sum(
+        r.saving_amount or 0.0
+        for r in recommendations
+        if r.status in {"approved", "remediated", "executed"}
     )
+
+    evidence_lines = [
+        "I do not have a direct persisted fact that fully answers this question, so here is the closest backend evidence currently in scope:",
+        f"- Synchronized resources: {len(resources)} total across {len(resource_types)} recorded type(s).",
+        f"- Recommendation lifecycle: {len(recommendations)} total; {len(active_recommendations)} currently actionable; recorded realized/approved savings ${realized_savings:.2f}/month.",
+        f"- Workflow history: {len(workflows)} run(s); statuses: " + (", ".join(f"{status}={count}" for status, count in sorted(workflow_statuses.items())) if workflow_statuses else "none recorded") + ".",
+    ]
+
+    if resource_types:
+        evidence_lines.append("- Resource type breakdown: " + ", ".join(f"{rtype}={count}" for rtype, count in sorted(resource_types.items())) + ".")
+    if recommendation_statuses:
+        evidence_lines.append("- Recommendation status breakdown: " + ", ".join(f"{status}={count}" for status, count in sorted(recommendation_statuses.items())) + ".")
+    if latest_workflow:
+        evidence_lines.append(f"- Latest workflow: {latest_workflow.id} is {latest_workflow.status}; objective: {latest_workflow.objective or 'not recorded'}.")
+    if latest_audit:
+        evidence_lines.append(f"- Latest audit event: {latest_audit.timestamp} {latest_audit.event_type} by {latest_audit.agent_name} ({latest_audit.status}).")
+
+    evidence_lines.append("Ask with a resource name/id, workflow id, recommendation id, or audit topic if you want a narrower answer from the same backend evidence.")
+    return "\n".join(evidence_lines)
 
 @v1_router.post("/ask-ai", response_model=APIResponse, tags=["AI"])
 async def ask_ai(payload: AskAIRequest, db: Session = Depends(get_db)):
@@ -1256,7 +1372,9 @@ async def ask_ai(payload: AskAIRequest, db: Session = Depends(get_db)):
     resources = _resource_query(db).all()
     recommendations = db.query(DBRecommendation).all()
     from backend.app.models.workflow import SequentialWorkflow
-    workflows = db.query(SequentialWorkflow).all()
+    from cloud_adapter import get_azure_client
+    cloud_mode = get_azure_client().get_mode()
+    workflows = db.query(SequentialWorkflow).filter(SequentialWorkflow.execution_mode == cloud_mode).order_by(SequentialWorkflow.created_at.desc()).all()
     audit_logs = db.query(DBAuditLog).order_by(DBAuditLog.timestamp.desc()).all()
     
     # Use google-genai Gemini if API key is present
@@ -1270,7 +1388,7 @@ async def ask_ai(payload: AskAIRequest, db: Session = Depends(get_db)):
             audit_str = "\n".join([f"- {a.timestamp} | {a.agent_name} | {a.step_name} | {a.event_type} | Status: {a.status}" for a in audit_logs[:20]])
             
             context = f"""
-You are the CloudOps Autopilot AI Assistant. You have access to the current live state of the cloud resources and multi-agent governance pipeline.
+You answer CloudOps operator questions using only the current live backend evidence provided below. Answer the specific question asked. If the evidence does not contain the requested fact, say exactly what is missing and provide the closest relevant backend facts; do not use canned introductions or generic menus.
 
 Active Page URL Context: {payload.context_url or "Dashboard Overview"}
 Currently Selected Resource ID: {payload.selected_resource_id or "None"}

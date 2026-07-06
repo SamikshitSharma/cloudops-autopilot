@@ -34,6 +34,27 @@ async def run_workflow_bg(workflow_id: str):
             logger.error(f"Background workflow run '{workflow_id}' failed: {e}", exc_info=True)
 
 
+
+def reconcile_stale_active_workflows(db: Session) -> None:
+    """Mark abandoned active workflows as failed so historical runs cannot masquerade as live operator activity."""
+    cutoff_seconds = 30 * 60
+    now = datetime.utcnow()
+    stale = db.query(SequentialWorkflow).filter(SequentialWorkflow.status.in_(["running", "pending"])).all()
+    changed = False
+    for wf in stale:
+        last_update = wf.updated_at or wf.created_at
+        if last_update and (now - last_update).total_seconds() > cutoff_seconds:
+            wf.status = "failed"
+            wf.updated_at = now
+            wf.errors = {"error": "Stale active workflow exceeded 30 minutes without completion and was closed by release reconciliation."}
+            db_run = db.query(DBRun).filter(DBRun.id == wf.run_id).first()
+            if db_run:
+                db_run.status = "failed"
+                db_run.completed_at = now
+            changed = True
+    if changed:
+        db.commit()
+
 router = APIRouter(prefix="/workflows", tags=["Sequential Workflows"])
 
 class TriggerWorkflowRequest(BaseModel):
@@ -102,6 +123,7 @@ async def trigger_workflow(req: TriggerWorkflowRequest, background_tasks: Backgr
 @router.get("", response_model=List[WorkflowCard])
 def list_workflow_history(db: Session = Depends(get_db)):
     """Retrieves all historical and active sequential workflow execution logs."""
+    reconcile_stale_active_workflows(db)
     from cloud_adapter import get_azure_client
     cloud_mode = get_azure_client().get_mode()
     workflows = db.query(SequentialWorkflow).filter(SequentialWorkflow.execution_mode == cloud_mode).order_by(SequentialWorkflow.created_at.desc()).all()
@@ -131,7 +153,7 @@ def list_workflow_history(db: Session = Depends(get_db)):
             updated_at=wf.updated_at,
             progress_percentage=progress,
             duration_seconds=duration,
-            confidence=wf.confidence or 1.0,
+            confidence=wf.confidence,
             estimated_savings=savings
         ))
         
@@ -140,6 +162,7 @@ def list_workflow_history(db: Session = Depends(get_db)):
 @router.get("/metrics/summary", response_model=AggregatedMetricsDTO)
 def get_aggregated_metrics(db: Session = Depends(get_db)):
     """Exposes consolidated system performance metrics and Azure SDK utilization logs."""
+    reconcile_stale_active_workflows(db)
     from cloud_adapter import get_azure_client
     cloud_mode = get_azure_client().get_mode()
     
@@ -306,7 +329,7 @@ def get_aggregated_metrics(db: Session = Depends(get_db)):
             failure_rate=0.0,
             average_workflow_duration=0.0,
             average_stage_duration={},
-            average_confidence=1.0,
+            average_confidence=None,
             estimated_total_savings=0.0,
             most_common_failure_reasons=[],
             azure_api_utilization_statistics={},
@@ -332,7 +355,7 @@ def get_aggregated_metrics(db: Session = Depends(get_db)):
         failure_rate=round(failure_rate, 2),
         average_workflow_duration=round(avg_duration, 2),
         average_stage_duration=avg_stage_durations,
-        average_confidence=round(avg_confidence, 2) if avg_confidence is not None else 1.0,
+        average_confidence=round(avg_confidence, 2) if avg_confidence is not None else None,
         estimated_total_savings=round(total_savings, 2) if total_savings is not None else 0.0,
         most_common_failure_reasons=common_failures,
         azure_api_utilization_statistics=azure_stats,

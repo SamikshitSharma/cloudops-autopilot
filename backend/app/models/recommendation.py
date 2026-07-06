@@ -15,7 +15,7 @@ class Recommendation(Base):
     rationale = Column(String(1000), nullable=False)
     risk_level = Column(String(50), nullable=False)  # low, high
     status = Column(String(50), nullable=False, default="pending")  # pending, auto_executed, escalated, approved, denied, executed, rolled_back
-    confidence_score = Column(Float, nullable=True, default=1.0)
+    confidence_score = Column(Float, nullable=True)
     evidence = Column(String(1000), nullable=True)
     reasoning_chain = Column(JSON, nullable=True)
 

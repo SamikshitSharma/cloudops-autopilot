@@ -25,7 +25,7 @@ class WorkflowContext(BaseModel):
     ai_observations: List[Dict[str, Any]] = Field(default_factory=list)
     reasoning_chain: List[Dict[str, Any]] = Field(default_factory=list)
     evidence: Dict[str, Any] = Field(default_factory=dict)
-    confidence: float = 1.0
+    confidence: Optional[float] = None
     
     recommendations: List[Dict[str, Any]] = Field(default_factory=list)
     cost_estimates: Dict[str, Any] = Field(default_factory=dict)
@@ -70,7 +70,7 @@ class WorkflowCard(BaseModel):
     updated_at: datetime
     progress_percentage: float
     duration_seconds: Optional[float]
-    confidence: float
+    confidence: Optional[float] = None
     estimated_savings: float
 
 class PipelineNode(BaseModel):
@@ -116,7 +116,7 @@ class AgentExecutionCard(BaseModel):
     input_summary: Optional[Dict[str, Any]]
     output_summary: Optional[Dict[str, Any]]
     reasoning_summary: Optional[Dict[str, Any]]
-    confidence: float
+    confidence: Optional[float] = None
     errors: Optional[Dict[str, Any]]
     llm_trace: Optional[Dict[str, Any]]
 
@@ -127,14 +127,14 @@ class ReasoningCard(BaseModel):
     finding: str
     action_proposed: str
     evidence: str
-    confidence: float
+    confidence: Optional[float] = None
     risk_level: str
 
 class MetricsCard(BaseModel):
     """Deep analysis of workflow efficiency."""
     workflow_duration: float
     stage_durations: Dict[str, float]
-    average_confidence: float
+    average_confidence: Optional[float] = None
     execution_success_rate: float
     retry_count: int
     azure_api_calls: int
@@ -173,7 +173,7 @@ class AggregatedMetricsDTO(BaseModel):
     failure_rate: float
     average_workflow_duration: float
     average_stage_duration: Dict[str, float]
-    average_confidence: float
+    average_confidence: Optional[float] = None
     estimated_total_savings: float
     most_common_failure_reasons: List[Dict[str, Any]]
     azure_api_utilization_statistics: Dict[str, int]

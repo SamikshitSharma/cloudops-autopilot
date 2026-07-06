@@ -22,7 +22,7 @@ class SequentialWorkflow(Base):
     
     # Final Output Summaries
     reasoning_chain = Column(JSON, nullable=True)
-    confidence = Column(Float, nullable=True, default=1.0)
+    confidence = Column(Float, nullable=True)
     evidence = Column(JSON, nullable=True)
     errors = Column(JSON, nullable=True)
     azure_actions = Column(JSON, nullable=True)
@@ -64,7 +64,7 @@ class WorkflowStage(Base):
     input_summary = Column(JSON, nullable=True)
     output_summary = Column(JSON, nullable=True)
     reasoning_summary = Column(JSON, nullable=True)
-    confidence = Column(Float, nullable=True, default=1.0)
+    confidence = Column(Float, nullable=True)
     errors = Column(JSON, nullable=True)
     
     # LLM Traceability Info

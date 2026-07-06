@@ -1153,16 +1153,16 @@ class SequentialOrchestrator:
         durations_dict = ctx.stage_timings
         bottleneck = max(durations_dict, key=durations_dict.get) if durations_dict else "none"
         confidences = [s.confidence for s in wf.stages if s.confidence is not None]
-        avg_conf = sum(confidences) / len(confidences) if confidences else 1.0
+        avg_conf = sum(confidences) / len(confidences) if confidences else None
         success_rate = len([s for s in wf.stages if s.status == "success"]) / len(wf.stages) if wf.stages else 1.0
         
         # Calculate execution efficiency
-        efficiency = (success_rate * avg_conf) / (wf.duration + 1.0)
+        efficiency = (success_rate * (avg_conf if avg_conf is not None else 0.0)) / (wf.duration + 1.0)
         
         metrics_payload = {
             "workflow_duration": wf.duration,
             "stage_durations": durations_dict,
-            "average_confidence": round(avg_conf, 2),
+            "average_confidence": round(avg_conf, 2) if avg_conf is not None else None,
             "execution_success_rate": round(success_rate * 100, 1),
             "retry_count": sum(s.retries_attempted for s in wf.stages if hasattr(s, "retries_attempted")) if hasattr(wf.stages[0], "retries_attempted") else 0,
             "azure_api_calls": len(ctx.discovered_resources) * 2 if wf.execution_mode == "LIVE" else 5,
