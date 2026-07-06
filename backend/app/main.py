@@ -303,13 +303,18 @@ async def check_health(db: Session = Depends(get_db)):
         cloud_error = str(exc)
         logger.error("Cloud adapter health check failed: %s", exc)
 
-    service_healthy = db_status == "healthy" and cloud_status == "healthy"
+    ai_status = "healthy" if settings.GEMINI_API_KEY else "unavailable"
+    ai_error = None if settings.GEMINI_API_KEY else "GEMINI_API_KEY is not configured; real AI reasoning is unavailable."
+
+    service_healthy = db_status == "healthy" and cloud_status == "healthy" and ai_status == "healthy"
     health_info = HealthDTO(
         status="healthy" if service_healthy else "unhealthy",
         database=db_status,
         cloud_mode=cloud_mode,
         cloud_status=cloud_status,
         cloud_error=cloud_error,
+        ai_status=ai_status,
+        ai_error=ai_error,
     )
     return JSONResponse(
         status_code=200 if service_healthy else 503,
@@ -1232,9 +1237,15 @@ Answer the user's question clearly and concisely based on the current state.
             ai_response = response.text
         except Exception as gen_err:
             logger.error(f"Gemini generation failed: {gen_err}")
-            ai_response = f"AI generation failed: {str(gen_err)}"
+            raise HTTPException(
+                status_code=502,
+                detail=f"AI generation failed: {str(gen_err)}"
+            ) from gen_err
     else:
-        ai_response = "Error: GEMINI_API_KEY is not configured in the backend environment. Real AI reasoning is required by the Release Contract."
+        raise HTTPException(
+            status_code=503,
+            detail="GEMINI_API_KEY is not configured in the backend environment. Real AI reasoning is required by the Release Contract."
+        )
         
     return make_response(True, "AI query completed", {"response": ai_response})
 

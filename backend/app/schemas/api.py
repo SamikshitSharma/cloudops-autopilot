@@ -88,6 +88,8 @@ class HealthDTO(BaseModel):
     cloud_mode: str = Field(..., description="Configured cloud mode: LIVE or MOCK")
     cloud_status: str = Field(..., description="Cloud adapter status")
     cloud_error: Optional[str] = Field(None, description="Most recent cloud adapter error")
+    ai_status: str = Field(..., description="AI reasoning backend status")
+    ai_error: Optional[str] = Field(None, description="Most recent AI reasoning backend error")
 
 class AgentReasoningPathDTO(BaseModel):
     id: str

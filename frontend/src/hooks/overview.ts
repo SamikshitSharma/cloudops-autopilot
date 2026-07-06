@@ -10,6 +10,8 @@ export interface HealthResponse {
     cloud_mode: "LIVE" | "MOCK" | string;
     cloud_status: string;
     cloud_error?: string | null;
+    ai_status: string;
+    ai_error?: string | null;
   };
 }
 

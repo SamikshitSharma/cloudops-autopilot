@@ -34,7 +34,14 @@ def get(path: str):
         r.raise_for_status()
         return r.json()
     except Exception as e:
-        return {"_error": str(e)}
+        detail = str(e)
+        response = getattr(e, "response", None)
+        if response is not None:
+            try:
+                detail = f"{detail} | body={response.json()}"
+            except Exception:
+                detail = f"{detail} | body={response.text[:500]}"
+        return {"_error": detail}
 
 # ============================================================
 # CONTRACT 1: Data Integrity (No Fabricated Metrics)

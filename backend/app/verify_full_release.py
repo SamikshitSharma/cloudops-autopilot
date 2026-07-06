@@ -25,7 +25,14 @@ def get(path: str, timeout: int = 10):
         r.raise_for_status()
         return r.json()
     except Exception as e:
-        return {"_error": str(e)}
+        detail = str(e)
+        response = getattr(e, "response", None)
+        if response is not None:
+            try:
+                detail = f"{detail} | body={response.json()}"
+            except Exception:
+                detail = f"{detail} | body={response.text[:500]}"
+        return {"_error": detail}
 
 def post(path: str, payload: dict, timeout: int = 15):
     try:
@@ -33,7 +40,14 @@ def post(path: str, payload: dict, timeout: int = 15):
         r.raise_for_status()
         return r.json()
     except Exception as e:
-        return {"_error": str(e)}
+        detail = str(e)
+        response = getattr(e, "response", None)
+        if response is not None:
+            try:
+                detail = f"{detail} | body={response.json()}"
+            except Exception:
+                detail = f"{detail} | body={response.text[:500]}"
+        return {"_error": detail}
 
 # ─────────────────────────────────────────────
 # SECTION 1 — HEALTH & AZURE MODE
@@ -214,11 +228,12 @@ ai_resp = post("/ask-ai", {"query": "What is the current system health status?"}
 if "_error" in ai_resp:
     check("AI ask endpoint reachable", False, ai_resp["_error"])
 else:
-    check("AI ask endpoint reachable",
-          ai_resp.get("success") is True or "answer" in ai_resp or "response" in ai_resp,
-          f"resp keys={list(ai_resp.keys())[:5]}")
-    answer = (ai_resp.get("data") or {}).get("answer") or ai_resp.get("answer") or ai_resp.get("response", "")
-    print(f"    -> AI response sample: {str(answer)[:100]}")
+    answer = (ai_resp.get("data") or {}).get("response") or (ai_resp.get("data") or {}).get("answer") or ai_resp.get("answer") or ai_resp.get("response", "")
+    answer_text = str(answer).strip()
+    check("AI ask endpoint reachable", ai_resp.get("success") is True, f"resp keys={list(ai_resp.keys())[:5]}")
+    check("AI ask returns non-empty answer", bool(answer_text), "empty AI response")
+    check("AI ask does not return an error payload", not answer_text.lower().startswith(("error:", "ai generation failed")), answer_text[:160])
+    print(f"    -> AI response sample: {answer_text[:100]}")
 
 
 # ─────────────────────────────────────────────

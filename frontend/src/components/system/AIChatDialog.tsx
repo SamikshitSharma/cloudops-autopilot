@@ -55,8 +55,9 @@ export function AIChatDialog({ open, onOpenChange }: Props) {
       const aiResponse = res?.data?.response || "I'm sorry, I could not retrieve an answer right now.";
       setMessages((prev) => [...prev, { role: "assistant", content: aiResponse }]);
     } catch (err: any) {
-      toast.error(`AI search failed: ${err.message}`);
-      setMessages((prev) => [...prev, { role: "assistant", content: "Failed to communicate with AI endpoint." }]);
+      const detail = err?.response?.data?.message || err?.response?.data?.detail || err.message || "AI endpoint unavailable";
+      toast.error(`AI search failed: ${detail}`);
+      setMessages((prev) => [...prev, { role: "assistant", content: `AI reasoning is unavailable: ${detail}` }]);
     } finally {
       setLoading(false);
     }
