@@ -170,3 +170,6 @@ class MockAzureClient(AzureClientAdapter):
             del self._disks[resource_id]
             return True
         return False
+
+    def get_mode(self) -> str:
+        return "MOCK"

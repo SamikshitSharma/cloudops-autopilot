@@ -54,14 +54,17 @@ class PolicyEvaluator:
         # Rule 2: Approval-forcing rules
         else:
             is_disk = "disk" in resource_id.lower() or (db_res and "disks" in db_res.type.lower())
-            needs_approval = (is_disk and proposed_action == "delete")
+            needs_approval = (
+                (is_disk and proposed_action == "delete") or 
+                (proposed_action in ("restrict_ssh", "disable_public_network"))
+            )
             
             if is_production:
                 needs_approval = True
                 
             if needs_approval:
                 requires_approval = True
-                reason = f"Remediation requires approval due to {'production status' if is_production else 'destructive action'}."
+                reason = f"Remediation requires approval due to {'production status' if is_production else 'sensitive/destructive action'}."
                 
         # Rule 3: Cost-governance thresholds (e.g. savings > $500 requires approval)
         if estimated_monthly_savings > 500.0 and not is_production:

@@ -2,7 +2,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Any, Optional
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Compute project root directory (4 levels up from this file)
@@ -60,14 +60,14 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
-    @field_validator("DATABASE_URL", mode="before")
-    @classmethod
-    def assemble_db_url(cls, v: Optional[str]) -> str:
-        """Fallback to project-relative default SQLite path if DATABASE_URL is not set."""
-        if v:
-            return v
-        db_path = PROJECT_ROOT / "cloudops_autopilot.db"
-        return f"sqlite:///{db_path.as_posix()}"
+    @model_validator(mode="after")
+    def assemble_db_url_based_on_mode(self) -> "Settings":
+        """Fallback to project-relative default SQLite path if DATABASE_URL is not set, branching on CLOUD_MODE."""
+        if not self.DATABASE_URL:
+            db_name = "cloudops_autopilot_live.db" if self.CLOUD_MODE == "LIVE" else "cloudops_autopilot_mock.db"
+            db_path = PROJECT_ROOT / db_name
+            self.DATABASE_URL = f"sqlite:///{db_path.as_posix()}"
+        return self
 
     @field_validator("JWT_SECRET_KEY")
     @classmethod

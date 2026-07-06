@@ -2,7 +2,7 @@ import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
-import type { Kpi } from "@/lib/mock";
+import type { Kpi } from "@/lib/types";
 
 export function KpiCard({ kpi }: { kpi: Kpi }) {
   const positive = kpi.intent === "positive";
@@ -18,10 +18,12 @@ export function KpiCard({ kpi }: { kpi: Kpi }) {
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wider text-muted-foreground">{kpi.label}</p>
           <p className="mt-2 font-display text-2xl font-semibold tracking-tight">{kpi.value}</p>
-          <div className={cn("mt-1 inline-flex items-center gap-1 text-xs font-medium", deltaCls)}>
-            <Arrow className="h-3 w-3" aria-hidden />
-            {Math.abs(kpi.delta)}%<span className="text-muted-foreground"> vs last period</span>
-          </div>
+          {kpi.delta !== 0 && (
+            <div className={cn("mt-1 inline-flex items-center gap-1 text-xs font-medium", deltaCls)}>
+              <Arrow className="h-3 w-3" aria-hidden />
+              {Math.abs(kpi.delta)}%<span className="text-muted-foreground"> vs last period</span>
+            </div>
+          )}
         </div>
         <div className="h-14 w-24 shrink-0">
           <ResponsiveContainer width="100%" height="100%">

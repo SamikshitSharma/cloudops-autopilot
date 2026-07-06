@@ -38,6 +38,16 @@ class ResourceDTO(BaseModel):
     status: str
     tags: Dict[str, str]
     last_seen: datetime
+    provider: str = "azure"
+    utilization: Optional[float] = None
+    monthly_cost: Optional[float] = None
+    cpu_utilization: Optional[float] = None
+    memory_utilization: Optional[float] = None
+    disk_utilization: Optional[float] = None
+    network_utilization: Optional[float] = None
+    health: str = "healthy"
+    last_updated: Optional[datetime] = None
+    telemetry_explanation: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -73,6 +83,7 @@ class ApprovalDTO(BaseModel):
 class HealthDTO(BaseModel):
     status: str = Field(..., description="Status of the application service")
     database: str = Field(..., description="Database connectivity verification status")
+    cloud_mode: str = Field(..., description="Active cloud mode: LIVE, HYBRID, or MOCK")
 
 class AgentReasoningPathDTO(BaseModel):
     id: str
@@ -87,3 +98,9 @@ class AgentReasoningPathDTO(BaseModel):
 
     class Config:
         from_attributes = True
+
+class AskAIRequest(BaseModel):
+    query: str = Field(..., description="Query/message to ask the AI assistant")
+    context_url: Optional[str] = Field(None, description="Optional page URL context")
+    selected_resource_id: Optional[str] = Field(None, description="Optional active resource selection context")
+

@@ -1,6 +1,6 @@
 import { CheckCircle2, CircleDashed, Loader2, XCircle, MinusCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { PipelineStage } from "@/lib/mock";
+import type { PipelineStage } from "@/lib/types";
 import { Progress } from "@/components/ui/progress";
 
 const iconFor = (s: PipelineStage["status"]) =>

@@ -18,9 +18,9 @@ const titles: Record<string, string> = {
   "/events": "Event Bus",
 };
 
-interface Props { onOpenPalette: () => void }
+interface Props { onOpenPalette: () => void; onOpenChat: () => void; }
 
-export function TopBar({ onOpenPalette }: Props) {
+export function TopBar({ onOpenPalette, onOpenChat }: Props) {
   const { pathname } = useLocation();
   const title = titles[pathname] ?? "Autopilot";
   return (
@@ -54,15 +54,15 @@ export function TopBar({ onOpenPalette }: Props) {
           <Search className="h-4 w-4" />
         </Button>
 
-        <Button variant="ghost" size="sm" className="gap-1.5 text-primary hover:text-primary" aria-label="Ask Autopilot AI">
+        <Button id="ask-ai-trigger" variant="ghost" size="sm" onClick={onOpenChat} className="gap-1.5 text-primary hover:text-primary" aria-label="Ask Autopilot AI">
           <Sparkles className="h-4 w-4" />
           <span className="hidden sm:inline">Ask AI</span>
         </Button>
 
         <NotificationCenter />
 
-        <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-primary text-xs font-semibold text-primary-foreground" aria-label="Account">
-          JD
+        <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-primary text-xs font-semibold text-primary-foreground cursor-pointer" title="CloudOps Operator" aria-label="CloudOps Operator">
+          CO
         </div>
       </div>
     </header>

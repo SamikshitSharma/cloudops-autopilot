@@ -8,20 +8,9 @@ from backend.app.models.reasoning_path import AgentReasoningPath
 
 def seed_db(db: Session):
     from shared.config import settings
+    from backend.app.models.workflow import SequentialWorkflow, WorkflowStage, WorkflowEventLog
     if settings.CLOUD_MODE.upper() == "LIVE":
-        print("Clearing mock/seeded database entries for live Azure mode...")
-        try:
-            db.query(TelemetryHistory).delete()
-            db.query(Recommendation).delete()
-            db.query(Approval).delete()
-            db.query(AuditLog).delete()
-            db.query(Run).delete()
-            db.query(Resource).delete()
-            db.query(AgentReasoningPath).delete()
-            db.commit()
-        except Exception as delete_err:
-            print(f"Error clearing database: {delete_err}")
-            db.rollback()
+        print("Synchronizing live Azure resources for inventory...")
 
         print("Discovering live Azure resources for inventory...")
         from cloud_adapter.live_client import LiveAzureClient
@@ -270,6 +259,26 @@ def seed_db(db: Session):
             status="Running",
             tags={"env": "dev"},
             last_seen=datetime.utcnow() - timedelta(hours=4)
+        ),
+        Resource(
+            id="kv-prod-keys",
+            provider_id="/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod/providers/Microsoft.KeyVault/vaults/kv-prod-keys",
+            name="kv-prod-keys",
+            type="Microsoft.KeyVault/vaults",
+            region="eastus",
+            status="Available",
+            tags={"env": "prod", "owner": "secops"},
+            last_seen=datetime.utcnow() - timedelta(hours=2)
+        ),
+        Resource(
+            id="db-prod-sql",
+            provider_id="/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod/providers/Microsoft.Sql/servers/db-prod-sql",
+            name="db-prod-sql",
+            type="Microsoft.Sql/servers",
+            region="eastus",
+            status="Online",
+            tags={"env": "prod", "project": "analytics"},
+            last_seen=datetime.utcnow() - timedelta(hours=2)
         )
     ]
     

@@ -43,3 +43,8 @@ class AzureClientAdapter(ABC):
     async def delete_unattached_disk(self, resource_id: str) -> bool:
         """Permanently delete storage volume. Returns True if succeeded."""
         pass
+
+    @abstractmethod
+    def get_mode(self) -> str:
+        """Retrieve the adapter's operating mode (MOCK, LIVE, or HYBRID)."""
+        pass

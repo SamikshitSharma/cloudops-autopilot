@@ -37,8 +37,10 @@ class LiveAzureClient(AzureClientAdapter):
             self.monitor_client = MonitorManagementClient(self.credential, self.subscription_id)
             self.web_client = WebSiteManagementClient(self.credential, self.subscription_id)
             logger.info("LiveAzureClient successfully initialized Azure clients.")
+            self._failed_init = False
         except Exception as e:
             logger.warning(f"Failed to initialize Azure SDK credentials: {e}. Will fall back to Mock mode for all operations.")
+            self._failed_init = True
 
     async def list_virtual_machines(self) -> List[VirtualMachineResource]:
         if not self.compute_client:
@@ -138,11 +140,15 @@ class LiveAzureClient(AzureClientAdapter):
             start_time = end_time - timedelta(hours=time_window_hours)
             timespan = f"{start_time.isoformat()}Z/{end_time.isoformat()}Z"
             
+            metric_name = "Percentage CPU"
+            if "serverfarms" in resolved_id.lower():
+                metric_name = "CpuPercentage"
+
             metric_data = self.monitor_client.metrics.list(
                 resolved_id,
                 timespan=timespan,
                 interval="PT1H",
-                metricnames="Percentage CPU",
+                metricnames=metric_name,
                 aggregation="Average"
             )
             
@@ -270,3 +276,8 @@ class LiveAzureClient(AzureClientAdapter):
                 pass
                 
         return resource_id
+
+    def get_mode(self) -> str:
+        if hasattr(self, "_failed_init") and self._failed_init:
+            return "HYBRID"
+        return "LIVE"

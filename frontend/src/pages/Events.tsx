@@ -1,43 +1,36 @@
 import { useEffect, useState } from "react";
-import { events as seed, type EventItem, type Severity } from "@/lib/mock";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SeverityBadge } from "@/components/ui-ext/SeverityBadge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Pause, Play } from "lucide-react";
+import { Pause, Play, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-const topics = ["anomaly.detected", "cost.budget.warn", "plan.generated", "policy.violation", "resource.healthy", "execution.applied"];
-const messages = [
-  "p95 latency drifted +80ms on checkout-svc",
-  "GKE node pool at 92% utilization",
-  "Cost anomaly on ml-training account (+$920)",
-  "IAM privilege escalation attempt blocked",
-  "Auto-scaled api-prod-* to 6 replicas",
-];
-const sev: Severity[] = ["info", "low", "medium", "high", "critical"];
+import { useEvents } from "@/hooks/useEvents";
+import { LoadingState, ErrorState, EmptyState } from "@/components/ui-ext/StateViews";
+import type { EventItem } from "@/lib/types";
 
 export default function Events() {
-  const [items, setItems] = useState<EventItem[]>(seed);
   const [paused, setPaused] = useState(false);
+  const [frozenItems, setFrozenItems] = useState<EventItem[]>([]);
+
+  // Query real events from audit logs
+  const { data: liveItems = [], isLoading, isError, error, refetch } = useEvents();
 
   useEffect(() => {
-    if (paused) return;
-    const id = setInterval(() => {
-      const now = new Date();
-      const ts = now.toTimeString().slice(0, 8);
-      const e: EventItem = {
-        id: `e-${now.getTime()}`,
-        ts,
-        topic: topics[Math.floor(Math.random() * topics.length)],
-        severity: sev[Math.floor(Math.random() * sev.length)],
-        message: messages[Math.floor(Math.random() * messages.length)],
-        source: ["sensor-agent", "detector-agent", "planner-agent", "cost-agent"][Math.floor(Math.random() * 4)],
-      };
-      setItems((prev) => [e, ...prev].slice(0, 60));
-    }, 2200);
-    return () => clearInterval(id);
-  }, [paused]);
+    if (!paused) {
+      setFrozenItems(liveItems);
+    }
+  }, [liveItems, paused]);
+
+  const items = paused ? frozenItems : liveItems;
+
+  if (isLoading) {
+    return <LoadingState label="Subscribing to orchestrator event streams…" />;
+  }
+
+  if (isError) {
+    return <ErrorState title="Event Stream Subscription Failed" description={error?.message} onRetry={() => refetch()} />;
+  }
 
   return (
     <div className="space-y-6 animate-in-up">
@@ -58,21 +51,30 @@ export default function Events() {
         </div>
       </div>
 
-      <Card className="glass overflow-hidden">
-        <ScrollArea className="h-[560px]">
-          <ul className="divide-y divide-border font-mono text-xs">
-            {items.map((e) => (
-              <li key={e.id} className="flex items-start gap-3 px-4 py-2 hover:bg-muted/30">
-                <span className="w-20 shrink-0 text-muted-foreground">{e.ts}</span>
-                <SeverityBadge severity={e.severity} dotOnly />
-                <span className="w-44 shrink-0 truncate text-primary">{e.topic}</span>
-                <span className="w-32 shrink-0 truncate text-muted-foreground">{e.source}</span>
-                <span className="flex-1 truncate text-foreground/90">{e.message}</span>
-              </li>
-            ))}
-          </ul>
-        </ScrollArea>
-      </Card>
+      {items.length === 0 ? (
+        <EmptyState
+          icon={Radio}
+          title="Event Bus Silent"
+          description="No operations have occurred. Agent events will stream dynamically once runs are active."
+        />
+      ) : (
+        <Card className="glass overflow-hidden">
+          <ScrollArea className="h-[560px]">
+            <ul className="divide-y divide-border font-mono text-xs">
+              {items.map((e) => (
+                <li key={e.id} className="flex items-start gap-3 px-4 py-2 hover:bg-muted/30">
+                  <span className="w-20 shrink-0 text-muted-foreground">{e.ts}</span>
+                  <SeverityBadge severity={e.severity} dotOnly />
+                  <span className="w-44 shrink-0 truncate text-primary">{e.topic}</span>
+                  <span className="w-32 shrink-0 truncate text-muted-foreground">{e.source}</span>
+                  <span className="flex-1 truncate text-foreground/90">{e.message}</span>
+                </li>
+              ))}
+            </ul>
+          </ScrollArea>
+        </Card>
+      )}
     </div>
   );
 }
+

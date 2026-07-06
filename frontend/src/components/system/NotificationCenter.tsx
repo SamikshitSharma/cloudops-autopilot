@@ -2,13 +2,29 @@ import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { notifications } from "@/lib/mock";
+import { useApprovals } from "@/hooks/useApprovals";
+import { useRecommendations } from "@/hooks/useRecommendations";
+import type { Notification } from "@/lib/types";
+import { toast } from "sonner";
 import { SeverityBadge } from "@/components/ui-ext/SeverityBadge";
-import { useState } from "react";
 
 export function NotificationCenter() {
-  const [items, setItems] = useState(notifications);
-  const unread = items.filter((n) => !n.read).length;
+  const { data: approvals = [] } = useApprovals();
+  const { data: recommendations = [] } = useRecommendations();
+
+  const pendingApprovals = approvals.filter((a) => a.status === "pending");
+  const items: Notification[] = pendingApprovals.map((a) => {
+    const reco = recommendations.find((r) => r.id === a.recommendation_id);
+    return {
+      id: a.id,
+      title: reco ? `${reco.action_type.toUpperCase()} Action Required` : "Approval Request",
+      body: reco ? reco.rationale : `Resource state change approval requested.`,
+      severity: reco ? (reco.risk_level === "high" ? "high" : "low") : "medium",
+      ts: new Date(a.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      read: false,
+    };
+  });
+  const unread = items.length;
 
   return (
     <Popover>
@@ -29,7 +45,7 @@ export function NotificationCenter() {
             <div className="text-sm font-medium">Notifications</div>
             <div className="text-xs text-muted-foreground">{unread} unread</div>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setItems(items.map((n) => ({ ...n, read: true })))}>
+          <Button variant="ghost" size="sm" onClick={() => toast.info("Pending approvals must be resolved from the Approvals Queue.")}>
             Mark all read
           </Button>
         </div>

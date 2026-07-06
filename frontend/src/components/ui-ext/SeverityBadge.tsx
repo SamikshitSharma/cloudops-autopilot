@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { Severity } from "@/lib/mock";
+import type { Severity } from "@/lib/types";
 
 const styles: Record<Severity, { dot: string; text: string; ring: string; label: string }> = {
   critical: { dot: "bg-destructive", text: "text-destructive", ring: "ring-destructive/30", label: "Critical" },

@@ -177,3 +177,18 @@ class AggregatedMetricsDTO(BaseModel):
     estimated_total_savings: float
     most_common_failure_reasons: List[Dict[str, Any]]
     azure_api_utilization_statistics: Dict[str, int]
+    total_discovered_resources: int
+    active_agents: int
+    azure_resources_managed: int
+    azure_regions: int
+    running_workflows: int
+    pending_approvals: int
+    resources_optimized_today: int
+    resources_under_observation: int
+    cost_saved_today: float
+    cost_saved_this_month: float
+    policies_checked: int
+    azure_api_calls_today: int
+    llm_requests: int
+    events_processed: int
+

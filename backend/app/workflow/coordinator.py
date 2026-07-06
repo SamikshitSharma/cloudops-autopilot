@@ -569,17 +569,17 @@ class WorkflowCoordinator:
         db_recos = db.query(DBRecommendation).filter(DBRecommendation.run_id == run_id).all()
         
         # Get confidence scores from history
-        analysis_conf = 0.95
-        policy_conf = 0.98
-        decision_conf = 0.95
+        analysis_conf = None
+        policy_conf = None
+        decision_conf = None
         for trace in getattr(context, "reasoning_history", []):
             agent = trace.get("agent_id")
             if agent == "analysis_agent":
-                analysis_conf = trace.get("confidence_score", 0.95)
+                analysis_conf = trace.get("confidence_score", None)
             elif agent == "policy_agent":
-                policy_conf = trace.get("confidence_score", 0.98)
+                policy_conf = trace.get("confidence_score", None)
             elif agent == "decision_agent":
-                decision_conf = trace.get("confidence_score", 0.95)
+                decision_conf = trace.get("confidence_score", None)
                 
         for db_reco in db_recos:
             r_id = db_reco.resource_id
@@ -592,7 +592,7 @@ class WorkflowCoordinator:
                     break
             analysis_data = {
                 "decision": analysis_decision,
-                "confidence": round(analysis_conf, 2)
+                "confidence": round(analysis_conf, 2) if analysis_conf is not None else None
             }
             
             # 2. FinOps
@@ -673,7 +673,7 @@ class WorkflowCoordinator:
             hyps = [
                 {
                     "hypothesis": f"Resource {r_id} is idle or overprovisioned due to low compute workload requirements.",
-                    "confidence": analysis_data.get("confidence", 0.95),
+                    "confidence": analysis_data.get("confidence", None),
                     "evidence": analysis_data.get("decision")
                 }
             ]

@@ -1,36 +1,86 @@
 import { useMemo, useState } from "react";
-import { resources } from "@/lib/mock";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui-ext/StatusPill";
-import { EmptyState } from "@/components/ui-ext/StateViews";
+import { EmptyState, LoadingState, ErrorState } from "@/components/ui-ext/StateViews";
 import { Search, Boxes, Download } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
+import { useResources } from "@/hooks/useResources";
+import type { Resource, Status } from "@/lib/types";
 
-const providerLabel: Record<string, string> = { aws: "AWS", azure: "Azure", gcp: "GCP" };
+const mapStatus = (status: string): Status => {
+  const s = status.toLowerCase();
+  if (s.startsWith("run") || s.startsWith("avail")) return "healthy";
+  if (s.startsWith("stop")) return "degraded";
+  if (s.startsWith("fail")) return "failing";
+  return "unknown";
+};
 
 export default function Resources() {
   const [q, setQ] = useState("");
-  const [provider, setProvider] = useState<string>("all");
-  const filtered = useMemo(() => resources.filter((r) =>
-    (provider === "all" || r.provider === provider) &&
-    (r.name.toLowerCase().includes(q.toLowerCase()) || r.type.toLowerCase().includes(q.toLowerCase()))
-  ), [q, provider]);
+  const { data: dbResources, isLoading, isError, error, refetch } = useResources(q);
+  const [selectedId, setSelectedId] = useState<string | null>(localStorage.getItem("last_selected_resource_id"));
+
+  const resources = useMemo(() => {
+    if (!dbResources) return [];
+    return dbResources.map((r): any => ({
+      id: r.id,
+      name: r.name,
+      type: r.type,
+      provider: "azure",
+      region: r.region,
+      status: mapStatus(r.status),
+      cost: r.monthly_cost ?? null,
+      utilization: r.utilization ?? null,
+      tags: Object.entries(r.tags).map(([k, v]) => `${k}:${v}`),
+      cpu_utilization: r.cpu_utilization ?? null,
+      memory_utilization: r.memory_utilization ?? null,
+      disk_utilization: r.disk_utilization ?? null,
+      network_utilization: r.network_utilization ?? null,
+      telemetry_explanation: r.telemetry_explanation ?? null,
+    }));
+  }, [dbResources]);
+
+  const handleExport = (format: "csv" | "json") => {
+    const link = document.createElement("a");
+    const url = `/api/v1/resources/export?format=${format}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
+    link.href = url;
+    link.setAttribute("download", `resources_export_${Date.now()}.${format}`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success(`Exporting resource inventory as ${format.toUpperCase()}...`);
+  };
+
+  const handleSelectResource = (rId: string) => {
+    localStorage.setItem("last_selected_resource_id", rId);
+    setSelectedId(rId);
+    toast.info(`Active resource context set to: ${rId}`);
+  };
+
+  if (isLoading) {
+    return <LoadingState label="Loading cloud resource inventory…" />;
+  }
+
+  if (isError) {
+    return <ErrorState title="Inventory Fetch Failed" description={error?.message} onRetry={() => refetch()} />;
+  }
 
   return (
     <div className="space-y-6 animate-in-up">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="font-display text-2xl font-semibold">Resource Inventory</h2>
-          <p className="text-sm text-muted-foreground">Unified view across cloud accounts — {resources.length.toLocaleString()} resources tracked</p>
+          <p className="text-sm text-muted-foreground">Azure cloud resources — {resources.length.toLocaleString()} resources tracked</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-2"><Download className="h-4 w-4" /> Export</Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport("csv")} className="gap-2"><Download className="h-4 w-4" /> Export CSV</Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport("json")} className="gap-2"><Download className="h-4 w-4" /> Export JSON</Button>
         </div>
       </div>
 
@@ -40,24 +90,11 @@ export default function Resources() {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or type…" className="pl-9" />
           </div>
-          <div className="flex gap-1 rounded-md border border-border bg-muted/30 p-1">
-            {(["all", "aws", "azure", "gcp"] as const).map((p) => (
-              <button
-                key={p}
-                onClick={() => setProvider(p)}
-                className={`rounded px-3 py-1 text-xs font-medium capitalize transition ${
-                  provider === p ? "bg-background text-foreground shadow" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {p === "all" ? "All clouds" : providerLabel[p]}
-              </button>
-            ))}
-          </div>
         </div>
       </Card>
 
       <Card className="glass overflow-hidden">
-        {filtered.length === 0 ? (
+        {resources.length === 0 ? (
           <EmptyState icon={Boxes} title="No resources match" description="Try clearing your filters or broadening the search." />
         ) : (
           <Table>
@@ -73,25 +110,58 @@ export default function Resources() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((r) => (
-                <TableRow key={r.id} className="cursor-pointer">
+              {resources.map((r) => (
+                <TableRow 
+                  key={r.id} 
+                  onClick={() => handleSelectResource(r.id)}
+                  className={`cursor-pointer transition-all duration-150 ${selectedId === r.id ? "bg-primary/10 hover:bg-primary/15 border-l-2 border-primary" : "hover:bg-muted/40"}`}
+                >
                   <TableCell>
                     <div className="font-medium">{r.name}</div>
-                    <div className="flex gap-1 pt-1">
+                    <div className="flex flex-wrap gap-1 pt-1">
                       {r.tags.map((t) => <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>)}
                     </div>
                   </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{r.type}</TableCell>
-                  <TableCell>{providerLabel[r.provider]}</TableCell>
+                  <TableCell>Azure</TableCell>
                   <TableCell className="font-mono text-xs">{r.region}</TableCell>
                   <TableCell><StatusPill status={r.status} /></TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Progress value={r.utilization} className="h-1.5 w-24" />
-                      <span className="font-mono text-xs text-muted-foreground">{r.utilization}%</span>
-                    </div>
+                    {r.cpu_utilization !== null ? (
+                      <div className="space-y-1.5 py-1 max-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground leading-none">
+                          <span>CPU</span>
+                          <span className="font-semibold">{r.cpu_utilization}%</span>
+                        </div>
+                        <Progress value={r.cpu_utilization} className="h-1" />
+                        
+                        <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground leading-none">
+                          <span>MEM</span>
+                          <span className="font-semibold">{r.memory_utilization}%</span>
+                        </div>
+                        <Progress value={r.memory_utilization} className="h-1 bg-muted/20" />
+                        
+                        <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground leading-none">
+                          <span>DISK</span>
+                          <span className="font-semibold">{r.disk_utilization}%</span>
+                        </div>
+                        <Progress value={r.disk_utilization} className="h-1 bg-muted/20" />
+                        
+                        <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground leading-none">
+                          <span>NET</span>
+                          <span className="font-semibold">{r.network_utilization}%</span>
+                        </div>
+                        <Progress value={r.network_utilization} className="h-1 bg-muted/20" />
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground/80 italic leading-relaxed block max-w-[180px]">
+                        {r.telemetry_explanation || "Telemetry unavailable"}
+                      </span>
+                    )}
                   </TableCell>
-                  <TableCell className="text-right font-mono">${r.cost.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-mono">
+                    {r.cost !== null && r.cost !== undefined ? `$${r.cost.toLocaleString()}` : "—"}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

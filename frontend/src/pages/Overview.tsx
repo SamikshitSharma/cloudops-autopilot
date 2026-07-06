@@ -1,15 +1,25 @@
+import { useMemo, useEffect } from "react";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { kpis, spendByService, utilizationSeries, events, recommendations, pipelineStages } from "@/lib/mock";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { ArrowRight, Sparkles, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
-import { SeverityBadge } from "@/components/ui-ext/SeverityBadge";
-import { PipelineTimeline } from "@/components/workflows/PipelineTimeline";
+import { toast } from "sonner";
+import { useHealth, useWorkflowMetrics, useWorkflowHistory } from "@/hooks/overview";
+import { cn } from "@/lib/utils";
 
 const tooltipStyle = {
   background: "hsl(var(--popover))",
@@ -19,7 +29,206 @@ const tooltipStyle = {
   color: "hsl(var(--popover-foreground))",
 } as const;
 
+const getStatusStyles = (status: string) => {
+  const normalized = status.toLowerCase().replace(/_/g, " ");
+  if (normalized === "completed") {
+    return "bg-success/10 text-success border-success/30";
+  } else if (normalized === "running") {
+    return "bg-info/10 text-info border-info/30";
+  } else if (normalized === "failed") {
+    return "bg-destructive/10 text-destructive border-destructive/30";
+  } else if (normalized === "waiting approval" || normalized === "blocked on approval") {
+    return "bg-warning/10 text-warning border-warning/30";
+  } else {
+    return "bg-muted/10 text-muted-foreground border-muted-foreground/30";
+  }
+};
+
+const getStatusLabel = (status: string) => {
+  const normalized = status.toLowerCase().replace(/_/g, " ");
+  if (normalized === "blocked on approval") return "waiting approval";
+  return normalized;
+};
+
+const KpiCardSkeleton = () => (
+  <Card className="glass p-5 h-[112px]">
+    <div className="space-y-2">
+      <Skeleton className="h-4 w-24 bg-muted/60" />
+      <Skeleton className="h-7 w-32 bg-muted/60" />
+      <Skeleton className="h-4 w-40 bg-muted/60" />
+    </div>
+  </Card>
+);
+
 export default function Overview() {
+  const { data: health, isLoading: isHealthLoading, isError: isHealthError, error: healthError } = useHealth();
+  const { data: metrics, isLoading: isMetricsLoading, isError: isMetricsError, error: metricsError } = useWorkflowMetrics();
+  const { data: history, isLoading: isHistoryLoading, isError: isHistoryError, error: historyError } = useWorkflowHistory();
+
+  // Step 10: Error state notifications using sonner
+  useEffect(() => {
+    if (isHealthError) {
+      toast.error("Failed to load system health status.");
+      console.error(healthError);
+    }
+  }, [isHealthError, healthError]);
+
+  useEffect(() => {
+    if (isMetricsError) {
+      toast.error("Failed to load workflow metrics summary.");
+      console.error(metricsError);
+    }
+  }, [isMetricsError, metricsError]);
+
+  useEffect(() => {
+    if (isHistoryError) {
+      toast.error("Failed to load workflow execution history.");
+      console.error(historyError);
+    }
+  }, [isHistoryError, historyError]);
+
+  // Step 5: Map backend values to KPIs
+  const mappedKpis = useMemo(() => {
+    if (!metrics) return [];
+    
+    const healthVal = health ? (health.success && health.data.status === "healthy" ? "Healthy" : "Degraded") : "Unknown";
+    
+    return [
+      {
+        id: "health",
+        label: "System Health",
+        value: healthVal,
+        delta: 0,
+        sparkline: [1, 1, 1, 1, 1],
+        intent: healthVal === "Healthy" ? ("positive" as const) : ("negative" as const),
+      },
+      {
+        id: "workflows",
+        label: "Total Workflows",
+        value: metrics.total_workflow_executions.toLocaleString(),
+        delta: 0,
+        sparkline: [1, 1, 1],
+        intent: "neutral" as const,
+      },
+      {
+        id: "success-rate",
+        label: "Success Rate",
+        value: `${metrics.success_rate.toFixed(1)}%`,
+        delta: 0,
+        sparkline: [metrics.success_rate, metrics.success_rate],
+        intent: "positive" as const,
+      },
+      {
+        id: "failure-rate",
+        label: "Failure Rate",
+        value: `${metrics.failure_rate.toFixed(1)}%`,
+        delta: 0,
+        sparkline: [metrics.failure_rate, metrics.failure_rate],
+        intent: metrics.failure_rate > 0 ? ("negative" as const) : ("neutral" as const),
+      },
+      {
+        id: "savings-month",
+        label: "Savings This Month",
+        value: `$${metrics.cost_saved_this_month.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo`,
+        delta: 0,
+        sparkline: [metrics.cost_saved_this_month, metrics.cost_saved_this_month],
+        intent: "positive" as const,
+      },
+      {
+        id: "savings-today",
+        label: "Realized Savings Today",
+        value: `$${metrics.cost_saved_today.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo`,
+        delta: 0,
+        sparkline: [metrics.cost_saved_today, metrics.cost_saved_today],
+        intent: "positive" as const,
+      },
+      {
+        id: "resources-managed",
+        label: "Resources Managed",
+        value: metrics.azure_resources_managed.toString(),
+        delta: 0,
+        sparkline: [metrics.azure_resources_managed, metrics.azure_resources_managed],
+        intent: "neutral" as const,
+      },
+      {
+        id: "regions",
+        label: "Azure Regions",
+        value: metrics.azure_regions.toString(),
+        delta: 0,
+        sparkline: [metrics.azure_regions, metrics.azure_regions],
+        intent: "neutral" as const,
+      },
+      {
+        id: "pending-approvals",
+        label: "Pending Approvals",
+        value: metrics.pending_approvals.toString(),
+        delta: 0,
+        sparkline: [metrics.pending_approvals, metrics.pending_approvals],
+        intent: metrics.pending_approvals > 0 ? ("warning" as const) : ("neutral" as const),
+      },
+      {
+        id: "optimized-today",
+        label: "Optimized Today",
+        value: metrics.resources_optimized_today.toString(),
+        delta: 0,
+        sparkline: [metrics.resources_optimized_today, metrics.resources_optimized_today],
+        intent: "positive" as const,
+      },
+      {
+        id: "active-agents",
+        label: "Active Agents",
+        value: metrics.active_agents.toString(),
+        delta: 0,
+        sparkline: [metrics.active_agents, metrics.active_agents],
+        intent: "positive" as const,
+      },
+      {
+        id: "policies-checked",
+        label: "Policies Checked",
+        value: metrics.policies_checked.toString(),
+        delta: 0,
+        sparkline: [metrics.policies_checked, metrics.policies_checked],
+        intent: "neutral" as const,
+      },
+      {
+        id: "azure-api-calls",
+        label: "Azure API Calls Today",
+        value: metrics.azure_api_calls_today.toLocaleString(),
+        delta: 0,
+        sparkline: [metrics.azure_api_calls_today, metrics.azure_api_calls_today],
+        intent: "neutral" as const,
+      },
+      {
+        id: "llm-requests",
+        label: "LLM Requests",
+        value: metrics.llm_requests.toLocaleString(),
+        delta: 0,
+        sparkline: [metrics.llm_requests, metrics.llm_requests],
+        intent: "neutral" as const,
+      },
+      {
+        id: "events-processed",
+        label: "Events Processed",
+        value: metrics.events_processed.toLocaleString(),
+        delta: 0,
+        sparkline: [metrics.events_processed, metrics.events_processed],
+        intent: "neutral" as const,
+      }
+    ];
+  }, [metrics, health]);
+
+  // Map Azure API usage breakdown
+  const chartData = useMemo(() => {
+    if (!metrics || !metrics.azure_api_utilization_statistics) return [];
+    return Object.entries(metrics.azure_api_utilization_statistics).map(([key, value]) => {
+      const name = key
+        .split("_")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+      return { name, count: value };
+    });
+  }, [metrics]);
+
   return (
     <div className="space-y-8 animate-in-up">
       {/* Hero */}
@@ -29,13 +238,13 @@ export default function Overview() {
         <div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-2xl">
             <Badge variant="outline" className="mb-4 gap-1.5 border-primary/40 text-primary">
-              <Sparkles className="h-3 w-3" /> Autopilot is actively optimizing 342 resources
+              <Sparkles className="h-3 w-3" /> Autopilot is actively optimizing {metrics?.total_discovered_resources ?? 0} resources
             </Badge>
             <h2 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">
               Your <span className="text-gradient">autonomous cloud</span>, at a glance.
             </h2>
             <p className="mt-3 max-w-xl text-sm text-muted-foreground md:text-base">
-              A 9-stage AI agent pipeline continuously observes, reasons, and safely remediates across AWS, Azure, and GCP —
+              A 9-stage AI agent pipeline continuously observes, reasons, and safely remediates across Azure —
               with human-in-the-loop guardrails on every high-impact change.
             </p>
           </div>
@@ -50,120 +259,136 @@ export default function Overview() {
         </div>
       </section>
 
-      {/* KPIs */}
+      {/* KPIs Grid */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.map((k) => <KpiCard key={k.id} kpi={k} />)}
+        {isHealthLoading || isMetricsLoading ? (
+          Array.from({ length: 15 }).map((_, i) => <KpiCardSkeleton key={i} />)
+        ) : isMetricsError ? (
+          <div className="col-span-full py-8 text-center text-destructive glass rounded-xl">
+            Failed to load metrics.
+          </div>
+        ) : (
+          mappedKpis.map((k) => <KpiCard key={k.id} kpi={k} />)
+        )}
       </section>
 
-      {/* Charts row */}
+      {/* Charts / Data Row */}
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card className="glass p-5 xl:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h3 className="font-display text-base font-semibold">Fleet Utilization · last 24h</h3>
-              <p className="text-xs text-muted-foreground">CPU, memory, and network across all workloads</p>
+        {/* Recent Workflows Table Card */}
+        <Card className="glass p-5 xl:col-span-2 flex flex-col justify-between">
+          <div className="w-full">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-display text-base font-semibold">Recent Workflow Runs</h3>
+                <p className="text-xs text-muted-foreground">Latest orchestration activity and pipeline health</p>
+              </div>
+              <Badge variant="outline" className="uppercase font-semibold tracking-wider text-xs border-primary/45 text-primary">
+                {health?.data?.cloud_mode || "MOCK"}
+              </Badge>
             </div>
-            <Badge variant="outline">Live</Badge>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer>
-              <AreaChart data={utilizationSeries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="cpu" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="mem" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="hour" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} interval={3} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "hsl(var(--primary))", strokeOpacity: 0.3 }} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Area type="monotone" dataKey="cpu" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#cpu)" />
-                <Area type="monotone" dataKey="memory" stroke="hsl(var(--accent))" strokeWidth={2} fill="url(#mem)" />
-                <Area type="monotone" dataKey="network" stroke="hsl(var(--info))" strokeWidth={2} fill="transparent" />
-              </AreaChart>
-            </ResponsiveContainer>
+            {isHistoryLoading ? (
+              <div className="space-y-2 py-4">
+                <Skeleton className="h-8 w-full bg-muted/60" />
+                <Skeleton className="h-8 w-full bg-muted/60" />
+                <Skeleton className="h-8 w-full bg-muted/60" />
+                <Skeleton className="h-8 w-full bg-muted/60" />
+                <Skeleton className="h-8 w-full bg-muted/60" />
+              </div>
+            ) : isHistoryError ? (
+              <div className="py-8 text-center text-destructive">
+                Failed to load workflow history.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Workflow ID</TableHead>
+                      <TableHead>Scenario</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Progress</TableHead>
+                      <TableHead>Mode</TableHead>
+                      <TableHead>Confidence</TableHead>
+                      <TableHead>Savings</TableHead>
+                      <TableHead>Created Time</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {history.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                          No workflow executions found.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      history.slice(0, 8).map((wf) => (
+                        <TableRow key={wf.workflow_id}>
+                          <TableCell className="font-mono text-xs font-semibold">{wf.workflow_id}</TableCell>
+                          <TableCell className="max-w-[120px] truncate">{wf.scenario_name || "—"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 border font-medium capitalize", getStatusStyles(wf.status))}>
+                              {getStatusLabel(wf.status)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{wf.progress_percentage.toFixed(2)}%</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              {wf.execution_mode}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{(wf.confidence * 100).toFixed(2)}%</TableCell>
+                          <TableCell className="font-mono text-xs text-success">
+                            ${wf.estimated_savings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                            {new Date(wf.created_at).toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
         </Card>
 
-        <Card className="glass p-5">
-          <div className="mb-4">
-            <h3 className="font-display text-base font-semibold">Spend by Service</h3>
-            <p className="text-xs text-muted-foreground">Multi-cloud breakdown · MTD</p>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer>
-              <BarChart data={spendByService} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(var(--muted) / 0.4)" }} />
-                <Bar dataKey="aws" stackId="a" fill="hsl(var(--primary))" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="azure" stackId="a" fill="hsl(var(--accent))" />
-                <Bar dataKey="gcp" stackId="a" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        {/* Azure API Usage Card */}
+        <Card className="glass p-5 flex flex-col justify-between">
+          <div className="w-full">
+            <div className="mb-4">
+              <h3 className="font-display text-base font-semibold">Azure API Usage</h3>
+              <p className="text-xs text-muted-foreground">Consolidated API call volume by operation</p>
+            </div>
+            {isMetricsLoading ? (
+              <div className="h-64 flex flex-col justify-between py-2">
+                <Skeleton className="h-10 w-full bg-muted/60" />
+                <Skeleton className="h-10 w-full bg-muted/60" />
+                <Skeleton className="h-10 w-full bg-muted/60" />
+              </div>
+            ) : isMetricsError ? (
+              <div className="h-64 flex items-center justify-center text-destructive">
+                Failed to load API utilization metrics.
+              </div>
+            ) : chartData.length === 0 ? (
+              <div className="h-64 flex items-center justify-center text-muted-foreground">
+                No utilization metrics available.
+              </div>
+            ) : (
+              <div className="h-64">
+                <ResponsiveContainer>
+                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(var(--muted) / 0.4)" }} />
+                    <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
         </Card>
-      </section>
-
-      {/* Pipeline + activity */}
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card className="glass p-5 xl:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h3 className="font-display text-base font-semibold">Live Agent Pipeline</h3>
-              <p className="text-xs text-muted-foreground">Run #P-2481 · triggered 2m ago</p>
-            </div>
-            <Button asChild variant="ghost" size="sm" className="gap-1 text-primary">
-              <Link to="/workflows">Open workflow center <ArrowRight className="h-3.5 w-3.5" /></Link>
-            </Button>
-          </div>
-          <PipelineTimeline stages={pipelineStages.slice(0, 6)} />
-        </Card>
-
-        <div className="flex flex-col gap-4">
-          <Card className="glass p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-display text-base font-semibold">Top Recommendations</h3>
-              <Button asChild variant="ghost" size="sm" className="text-primary"><Link to="/recommendations">All</Link></Button>
-            </div>
-            <ul className="space-y-2">
-              {recommendations.slice(0, 3).map((r) => (
-                <li key={r.id} className="rounded-md border border-border/60 bg-muted/20 p-3 hover:bg-muted/40">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium leading-snug">{r.title}</p>
-                    <SeverityBadge severity={r.severity} />
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">{r.impact}</p>
-                  {r.savings && <p className="mt-1 text-xs font-medium text-success">{r.savings}</p>}
-                </li>
-              ))}
-            </ul>
-          </Card>
-
-          <Card className="glass p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-display text-base font-semibold">Event Stream</h3>
-              <Button asChild variant="ghost" size="sm" className="text-primary"><Link to="/events">Open</Link></Button>
-            </div>
-            <ul className="space-y-2 font-mono text-[11px]">
-              {events.slice(0, 5).map((e) => (
-                <li key={e.id} className="flex items-start gap-2">
-                  <span className="text-muted-foreground">{e.ts}</span>
-                  <SeverityBadge severity={e.severity} dotOnly />
-                  <span className="text-primary">{e.topic}</span>
-                  <span className="truncate text-foreground/80">{e.message}</span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </div>
       </section>
     </div>
   );

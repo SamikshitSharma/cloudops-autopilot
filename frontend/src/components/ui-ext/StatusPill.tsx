@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { Status } from "@/lib/mock";
+import type { Status } from "@/lib/types";
 
 const map: Record<Status, { label: string; cls: string; dot: string }> = {
   healthy:  { label: "Healthy",  cls: "text-success border-success/30 bg-success/10", dot: "bg-success" },
