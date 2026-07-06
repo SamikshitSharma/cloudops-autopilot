@@ -173,24 +173,26 @@ async def list_resources(workflow_id: str, agent_id: str) -> dict:
         plans = await client.list_app_service_plans()
         
         other_resources = []
-        from shared.config import settings
         if settings.CLOUD_MODE.upper() == "LIVE" and hasattr(client, "resource_client") and client.resource_client:
             try:
-                # Add the Resource Group itself
-                other_resources.append({
-                    "id": "cloudops-demo-rg",
-                    "provider_id": f"/subscriptions/{client.subscription_id}/resourceGroups/cloudops-demo-rg",
-                    "name": "cloudops-demo-rg",
-                    "type": "Microsoft.Resources/resourceGroups",
-                    "region": "centralindia",
-                    "status": "Available",
-                    "tags": {}
-                })
-                
-                # List generic resources in the resource group
-                resources = client.resource_client.resources.list_by_resource_group("cloudops-demo-rg")
-                for res in resources:
-                    if res.type == "Microsoft.Compute/virtualMachines":
+                for group in client.resource_client.resource_groups.list():
+                    other_resources.append({
+                        "id": group.name,
+                        "provider_id": f"/subscriptions/{client.subscription_id}/resourceGroups/{group.name}",
+                        "name": group.name,
+                        "type": "Microsoft.Resources/resourceGroups",
+                        "region": group.location,
+                        "status": "Available",
+                        "tags": group.tags or {}
+                    })
+
+                specialized_types = {
+                    "microsoft.compute/virtualmachines",
+                    "microsoft.compute/disks",
+                    "microsoft.web/serverfarms",
+                }
+                for res in client.resource_client.resources.list():
+                    if (res.type or "").lower() in specialized_types:
                         continue
                     other_resources.append({
                         "id": res.name,
@@ -202,8 +204,7 @@ async def list_resources(workflow_id: str, agent_id: str) -> dict:
                         "tags": res.tags or {}
                     })
             except Exception as e:
-                import logging
-                logging.getLogger("FastAPIServer").error(f"Failed to fetch other resources in list_resources tool: {e}")
+                raise ToolValidationError(f"LIVE resource inventory query failed: {e}") from e
                 
         return {
             "vms": [v.model_dump() if hasattr(v, "model_dump") else v for v in vms],
@@ -235,7 +236,7 @@ async def get_resource(resource_id: str, workflow_id: str, agent_id: str) -> dic
         # VM Search
         vms = await client.list_virtual_machines()
         for v in vms:
-            if v.id == resource_id:
+            if resource_id in {v.id, getattr(v, "name", None), getattr(v, "provider_id", None)}:
                 return {"type": "VirtualMachine", "data": v.model_dump() if hasattr(v, "model_dump") else v}
         # Disk Search
         disks = await client.list_unattached_disks()
@@ -594,7 +595,7 @@ async def verify_execution(resource_id: str, expected_state: str, workflow_id: s
         client = get_azure_client()
         vms = await client.list_virtual_machines()
         for v in vms:
-            if v.id == resource_id:
+            if resource_id in {v.id, getattr(v, "name", None), getattr(v, "provider_id", None)}:
                 # In mock client, stop VM sets state to Deallocated
                 actual = v.status.lower()
                 expected = expected_state.lower()
@@ -605,7 +606,10 @@ async def verify_execution(resource_id: str, expected_state: str, workflow_id: s
                     "expected_state": expected_state,
                     "actual_state": v.status
                 }
-        # If not VM, default success for mock purposes
+        if settings.CLOUD_MODE.upper() == "LIVE":
+            raise ToolValidationError(f"Resource '{resource_id}' was not found during LIVE execution verification.")
+
+        # MOCK mode keeps legacy permissive verification behavior for scenario tests.
         return {
             "resource_id": resource_id,
             "verified": True,

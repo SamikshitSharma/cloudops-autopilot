@@ -51,11 +51,6 @@ class TelemetryAgent(BaseAgent):
         # Get scenario name from payload, falling back to context
         scenario_name = input_data.scenario_name or context.telemetry.get("scenario_name")
         
-        # Failure Simulation: Missing Telemetry
-        if scenario_name == "missing_telemetry":
-            self.logger.log_error("Critical error: Telemetry metrics are missing on the target host.")
-            raise ValueError("Critical: Telemetry collection failed. No metrics found.")
-
         from shared.config import settings
         if settings.CLOUD_MODE.upper() == "LIVE":
             self.logger.log_thought("CLOUD_MODE is LIVE. Gathering live telemetry from Azure...")
@@ -70,41 +65,49 @@ class TelemetryAgent(BaseAgent):
                 metrics_list = []
                 for vm in vms:
                     points = await client.get_resource_telemetry(vm.provider_id, 1)
-                    cpu = 2.5 # default fallback
+                    metric = {
+                        "resource_id": vm.provider_id,
+                        "name": vm.name,
+                        "type": vm.type,
+                        "status": vm.status,
+                        "metric_source": "Azure Monitor"
+                    }
                     if points:
-                        cpu = points[-1].cpu_percent
-                    metrics_list.append({
-                        "resource_id": vm.name,
-                        "type": "VirtualMachine",
-                        "cpu_utilization": cpu,
-                        "memory_utilization": 20.0,
-                        "status": vm.status
-                    })
+                        metric["cpu_utilization"] = points[-1].cpu_percent
+                    metrics_list.append(metric)
                     
                 for disk in disks:
                     metrics_list.append({
-                        "resource_id": disk.name,
-                        "type": "Disk",
-                        "status": disk.status
+                        "resource_id": disk.provider_id,
+                        "name": disk.name,
+                        "type": disk.type,
+                        "status": disk.status,
+                        "metric_source": "Azure inventory"
                     })
                     
                 for plan in plans:
                     metrics_list.append({
-                        "resource_id": plan.name,
-                        "type": "AppServicePlan",
-                        "status": plan.status
+                        "resource_id": plan.provider_id,
+                        "name": plan.name,
+                        "type": plan.type,
+                        "status": plan.status,
+                        "metric_source": "Azure inventory"
                     })
                     
                 telemetry_data = {
-                    "resource_group": "cloudops-demo-rg",
+                    "resource_group": resource_group,
                     "timestamp": datetime.utcnow().isoformat() + "Z",
                     "metrics": metrics_list
                 }
             except Exception as e:
-                self.logger.log_error(f"Failed to fetch live telemetry: {e}. Falling back to mock/scenario.")
-                scenario_info = SCENARIOS.get(scenario_name or "idle_vm", SCENARIOS["idle_vm"])
-                telemetry_data = scenario_info.get("telemetry_data", {})
+                self.logger.log_error(f"Failed to fetch live telemetry: {e}")
+                raise RuntimeError(f"LIVE telemetry collection failed: {e}") from e
         else:
+            # Failure simulation applies only in MOCK scenario mode.
+            if scenario_name == "missing_telemetry":
+                self.logger.log_error("Critical error: Telemetry metrics are missing on the target host.")
+                raise ValueError("Critical: Telemetry collection failed. No metrics found.")
+
             if scenario_name is None:
                 # Default backward-compatible telemetry with 3 metrics (2 anomalies)
                 telemetry_data = {
