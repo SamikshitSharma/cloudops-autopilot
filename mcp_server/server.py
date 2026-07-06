@@ -430,6 +430,8 @@ async def request_approval(resource_id: str, action: str, workflow_id: str, agen
                 if not reco:
                     res = db.query(Resource).filter(Resource.id == resource_id).first()
                     if not res:
+                        if settings.CLOUD_MODE.upper() == "LIVE":
+                            raise ToolValidationError(f"Cannot request LIVE approval for unknown resource '{resource_id}'.")
                         res = Resource(
                             id=resource_id,
                             provider_id=f"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/default-rg/providers/Microsoft.Compute/virtualMachines/{resource_id}",
