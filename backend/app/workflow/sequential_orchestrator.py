@@ -169,11 +169,11 @@ class SequentialOrchestrator:
                 
                 res_list = []
                 for vm in vms:
-                    res_list.append({"id": vm.name, "type": "VirtualMachine", "region": vm.region, "status": vm.status, "tags": vm.tags})
+                    res_list.append({"id": vm.id, "provider_id": vm.provider_id, "name": vm.name, "type": vm.type, "region": vm.region, "status": vm.status, "tags": vm.tags})
                 for disk in disks:
-                    res_list.append({"id": disk.name, "type": "Disk", "region": disk.region, "status": disk.status, "tags": disk.tags})
+                    res_list.append({"id": disk.id, "provider_id": disk.provider_id, "name": disk.name, "type": disk.type, "region": disk.region, "status": disk.status, "tags": disk.tags})
                 for plan in plans:
-                    res_list.append({"id": plan.name, "type": "AppServicePlan", "region": plan.region, "status": plan.status, "tags": plan.tags})
+                    res_list.append({"id": plan.id, "provider_id": plan.provider_id, "name": plan.name, "type": plan.type, "region": plan.region, "status": plan.status, "tags": plan.tags})
             else:
                 # Load from scenario mock registry
                 from agents.shared.scenarios import SCENARIOS
@@ -217,14 +217,18 @@ class SequentialOrchestrator:
                 from cloud_adapter import get_azure_client
                 client = get_azure_client()
                 for r in ctx_resources:
-                    if r["type"] == "VirtualMachine":
-                        points = await client.get_resource_telemetry(r["id"], 1)
-                        cpu = points[-1].cpu_percent if points else 2.5
-                        metrics_list.append({"resource_id": r["id"], "type": "VirtualMachine", "cpu_utilization": cpu, "memory_utilization": 20.0, "status": "running"})
-                    elif r["type"] == "Disk":
-                        metrics_list.append({"resource_id": r["id"], "type": "Disk", "status": "unattached"})
+                    resource_type = r["type"].lower()
+                    resource_id = r.get("provider_id") or r["id"]
+                    if "virtualmachines" in resource_type or r["type"] == "VirtualMachine":
+                        points = await client.get_resource_telemetry(resource_id, 1)
+                        metric = {"resource_id": r["id"], "type": r["type"], "status": r.get("status", "Unknown"), "metric_source": "Azure Monitor"}
+                        if points:
+                            metric["cpu_utilization"] = points[-1].cpu_percent
+                        metrics_list.append(metric)
+                    elif "disks" in resource_type or r["type"] == "Disk":
+                        metrics_list.append({"resource_id": r["id"], "type": r["type"], "status": r.get("status", "Unknown"), "metric_source": "Azure Resource Graph"})
                     else:
-                        metrics_list.append({"resource_id": r["id"], "type": r["type"], "status": "running"})
+                        metrics_list.append({"resource_id": r["id"], "type": r["type"], "status": r.get("status", "Unknown"), "metric_source": "Azure inventory"})
             else:
                 from agents.shared.scenarios import SCENARIOS
                 scen = wf.scenario_name or "idle_vm"
@@ -260,13 +264,13 @@ class SequentialOrchestrator:
             for m in metrics:
                 r_id = m.get("resource_id")
                 r_type = m.get("type")
-                if r_type == "VirtualMachine" and m.get("cpu_utilization", 100.0) < 10.0:
+                if (r_type == "VirtualMachine" or "virtualmachines" in str(r_type).lower()) and m.get("cpu_utilization") is not None and m.get("cpu_utilization") < 10.0:
                     underutilized.append(r_id)
                     anomalies.append({"resource_id": r_id, "type": "VirtualMachine", "issue": "Idle CPU utilization"})
-                elif r_type == "Disk" and m.get("status") == "unattached":
+                elif (r_type == "Disk" or "disks" in str(r_type).lower()) and str(m.get("status", "")).lower() == "unattached":
                     underutilized.append(r_id)
                     anomalies.append({"resource_id": r_id, "type": "Disk", "issue": "Orphaned storage"})
-                elif r_type == "AppServicePlan" and m.get("status") == "underutilized":
+                elif (r_type == "AppServicePlan" or "serverfarms" in str(r_type).lower()) and str(m.get("status", "")).lower() == "underutilized":
                     underutilized.append(r_id)
                     anomalies.append({"resource_id": r_id, "type": "AppServicePlan", "issue": "Underutilized scale-tier"})
                     
@@ -296,6 +300,7 @@ class SequentialOrchestrator:
             # Retrieve all discovered resources from context
             ctx_resources = wf.context.get("inventory", {}).get("resources", [])
             underutilized = msg.get("underutilized", [])
+            telemetry_metrics = wf.context.get("telemetry", {}).get("metrics", [])
             
             recos = []
             savings = {}
@@ -308,34 +313,50 @@ class SequentialOrchestrator:
                     continue
                 seen_resources.add(r_id)
                 
-                action = "stop"
-                saving = 50.00
-                finding = "Idle compute resource"
-                evidence = "Average CPU utilization is 2.5% over the last 7 days."
-                risk_level = "low"
-                
                 # Check resource ID or type
                 r_info = next((x for x in ctx_resources if x["id"] == r_id), {})
                 r_type = r_info.get("type", "").lower()
-                
-                if "disk" in r_type or "disk" in r_id.lower():
-                    action = "delete"
-                    saving = 32.50
-                    finding = "Orphaned storage volume"
-                    evidence = "Disk has been unattached for > 30 days."
+
+                if wf.execution_mode == "LIVE":
+                    metric = next((x for x in telemetry_metrics if x.get("resource_id") == r_id), {})
+                    saving = 0.0
                     risk_level = "low"
-                elif "conflict" in r_id.lower() or "prod" in r_id.lower() or "over" in r_id.lower():
-                    action = "resize"
-                    saving = 120.00
-                    finding = "Overprovisioned production tier VM"
-                    evidence = "CPU utilization peak is under 40% with high memory headroom."
-                    risk_level = "high"
-                elif "dev" in r_id.lower():
+                    if "disk" in r_type or "disk" in r_id.lower():
+                        action = "delete"
+                        finding = "Azure inventory reports unattached disk"
+                        evidence = f"Disk status from synchronized Azure inventory: {r_info.get('status', metric.get('status', 'Unknown'))}. Azure cost savings were not collected."
+                    elif "virtualmachines" in r_type or "vm" in r_type or "vm" in r_id.lower():
+                        if metric.get("cpu_utilization") is None:
+                            continue
+                        action = "stop"
+                        finding = "Azure Monitor reports low VM CPU utilization"
+                        evidence = f"Latest Azure Monitor CPU datapoint is {metric['cpu_utilization']}%. Azure cost savings were not collected."
+                    else:
+                        continue
+                else:
                     action = "stop"
                     saving = 50.00
-                    finding = "Non-production environment VM run-idle"
-                    evidence = "Average CPU is 1.8% during business hours."
+                    finding = "Idle compute resource"
+                    evidence = "Average CPU utilization is 2.5% over the last 7 days."
                     risk_level = "low"
+                    if "disk" in r_type or "disk" in r_id.lower():
+                        action = "delete"
+                        saving = 32.50
+                        finding = "Orphaned storage volume"
+                        evidence = "Disk has been unattached for > 30 days."
+                        risk_level = "low"
+                    elif "conflict" in r_id.lower() or "prod" in r_id.lower() or "over" in r_id.lower():
+                        action = "resize"
+                        saving = 120.00
+                        finding = "Overprovisioned production tier VM"
+                        evidence = "CPU utilization peak is under 40% with high memory headroom."
+                        risk_level = "high"
+                    elif "dev" in r_id.lower():
+                        action = "stop"
+                        saving = 50.00
+                        finding = "Non-production environment VM run-idle"
+                        evidence = "Average CPU is 1.8% during business hours."
+                        risk_level = "low"
                     
                 recos.append({
                     "recommendation_id": f"reco-{r_id}",
@@ -350,6 +371,8 @@ class SequentialOrchestrator:
                 
             # 2. Scan remaining inventory for Security, Reliability, and Compliance recommendations
             for r in ctx_resources:
+                if wf.execution_mode == "LIVE":
+                    continue
                 r_id = r["id"]
                 if r_id in seen_resources:
                     continue
@@ -875,11 +898,18 @@ class SequentialOrchestrator:
                     # Persist resources to DB
                     from backend.app.models.resource import Resource as DBResource
                     for res in output["resources"]:
+                        provider_id = res.get("provider_id")
+                        if not provider_id:
+                            if settings.CLOUD_MODE.upper() == "LIVE":
+                                logger.warning("Skipping LIVE inventory resource without provider_id: %s", res.get("id"))
+                                continue
+                            provider_id = f"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/default-rg/providers/Microsoft.Compute/virtualMachines/{res['id']}"
+
                         db_res = db.query(DBResource).filter(DBResource.id == res["id"]).first()
                         if not db_res:
                             db_res = DBResource(id=res["id"])
                             db.add(db_res)
-                        db_res.provider_id = res.get("provider_id") or f"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/default-rg/providers/Microsoft.Compute/virtualMachines/{res['id']}"
+                        db_res.provider_id = provider_id
                         db_res.name = res.get("name") or res["id"]
                         db_res.type = res["type"]
                         db_res.region = res.get("region", "eastus")
@@ -911,7 +941,7 @@ class SequentialOrchestrator:
                                 run_id=wf.run_id,
                                 resource_id=reco["resource_id"],
                                 action_type=reco.get("proposed_action", "stop"),
-                                saving_amount=output["savings_detail"].get(reco["resource_id"], 50.0),
+                                saving_amount=output["savings_detail"].get(reco["resource_id"], 0.0),
                                 rationale=reco.get('finding', 'Idle patterns identified'),
                                 evidence=reco.get('evidence', 'Utilization is consistently below optimization limits.'),
                                 confidence_score=reco.get('confidence', None),
@@ -920,7 +950,7 @@ class SequentialOrchestrator:
                             )
                             db.add(db_reco)
                         else:
-                            db_reco.saving_amount = output["savings_detail"].get(db_reco.resource_id, db_reco.saving_amount)
+                            db_reco.saving_amount = output["savings_detail"].get(db_reco.resource_id, 0.0)
                             db_reco.rationale = reco.get('finding', db_reco.rationale)
                             db_reco.evidence = reco.get('evidence', db_reco.evidence)
                             db_reco.confidence_score = reco.get('confidence', db_reco.confidence_score)

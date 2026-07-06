@@ -365,8 +365,8 @@ class WorkflowCoordinator:
                         run_id=run.run_id,
                         resource_id=approval_req.resource_id,
                         action_type=approval_req.action_type,
-                        saving_amount=50.0,
-                        rationale="Approval requested",
+                        saving_amount=0.0,
+                        rationale="Approval requested; savings unavailable until cost evidence is recorded.",
                         risk_level="high",
                         status="escalated"
                     )
@@ -510,6 +510,7 @@ class WorkflowCoordinator:
     def _save_recommendations(self, db, run_id: str, context: Any) -> None:
         from backend.app.models.recommendation import Recommendation as DBRecommendation
         from backend.app.models.resource import Resource as DBResource
+        from backend.app.core.config import settings
         
         recommendations = context.recommendations or []
         cost_estimates = context.cost_estimates or {}
@@ -520,8 +521,15 @@ class WorkflowCoordinator:
             db_reco = db.query(DBRecommendation).filter(DBRecommendation.id == reco_id).first()
             if not db_reco:
                 res_id = reco.get("resource_id")
+                if not res_id:
+                    logger.warning("Skipping recommendation without resource_id in run %s", run_id)
+                    continue
+
                 res = db.query(DBResource).filter(DBResource.id == res_id).first()
                 if not res:
+                    if settings.CLOUD_MODE.upper() == "LIVE":
+                        logger.warning("Skipping LIVE recommendation for unknown resource %s", res_id)
+                        continue
                     res = DBResource(
                         id=res_id,
                         provider_id=f"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/default-rg/providers/Microsoft.Compute/virtualMachines/{res_id}",
@@ -539,14 +547,14 @@ class WorkflowCoordinator:
                     run_id=run_id,
                     resource_id=res_id,
                     action_type=reco.get("proposed_action", "stop"),
-                    saving_amount=savings_detail.get(res_id, 50.0),
+                    saving_amount=savings_detail.get(res_id, 0.0),
                     rationale=f"{reco.get('finding')}: {reco.get('evidence')}",
                     risk_level="low",
                     status="pending"
                 )
                 db.add(db_reco)
             else:
-                db_reco.saving_amount = savings_detail.get(db_reco.resource_id, db_reco.saving_amount)
+                db_reco.saving_amount = savings_detail.get(db_reco.resource_id, 0.0)
                 db_reco.rationale = f"{reco.get('finding')}: {reco.get('evidence')}"
             db.commit()
 

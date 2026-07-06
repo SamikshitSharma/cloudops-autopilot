@@ -48,6 +48,8 @@ class ResourceDTO(BaseModel):
     health: str = "healthy"
     last_updated: Optional[datetime] = None
     telemetry_explanation: Optional[str] = None
+    metric_source: Optional[str] = None
+    cost_explanation: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -83,7 +85,9 @@ class ApprovalDTO(BaseModel):
 class HealthDTO(BaseModel):
     status: str = Field(..., description="Status of the application service")
     database: str = Field(..., description="Database connectivity verification status")
-    cloud_mode: str = Field(..., description="Active cloud mode: LIVE, HYBRID, or MOCK")
+    cloud_mode: str = Field(..., description="Configured cloud mode: LIVE or MOCK")
+    cloud_status: str = Field(..., description="Cloud adapter status")
+    cloud_error: Optional[str] = Field(None, description="Most recent cloud adapter error")
 
 class AgentReasoningPathDTO(BaseModel):
     id: str

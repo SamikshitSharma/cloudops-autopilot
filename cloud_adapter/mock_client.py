@@ -159,6 +159,18 @@ class MockAzureClient(AzureClientAdapter):
             return True
         return False
 
+    async def start_virtual_machine(self, resource_id: str) -> bool:
+        if resource_id in self._vms:
+            self._vms[resource_id].status = "Running"
+            return True
+        return False
+
+    async def resize_virtual_machine(self, resource_id: str, vm_size: str) -> bool:
+        if resource_id in self._vms:
+            self._vms[resource_id].vm_size = vm_size
+            return True
+        return False
+
     async def stop_app_service_plan(self, resource_id: str) -> bool:
         if resource_id in self._plans:
             self._plans[resource_id].status = "Stopped"

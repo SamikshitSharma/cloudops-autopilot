@@ -13,12 +13,12 @@ def seed_db(db: Session):
         print("Synchronizing live Azure resources for inventory...")
 
         print("Discovering live Azure resources for inventory...")
-        from cloud_adapter.live_client import LiveAzureClient
+        from cloud_adapter import get_azure_client
         import asyncio
         import threading
         
         async def discover():
-            client = LiveAzureClient()
+            client = get_azure_client()
             resources_to_add = []
             
             # 1. Discover VMs
@@ -72,41 +72,56 @@ def seed_db(db: Session):
             except Exception as e:
                 print(f"Error discovering App Service Plans: {e}")
                 
-            # 4. Discover generic resources in cloudops-demo-rg
+            # 4. Discover resource groups and remaining resources subscription-wide.
             if client.resource_client:
                 try:
-                    # Add Resource Group itself
-                    resources_to_add.append(Resource(
-                        id="cloudops-demo-rg",
-                        provider_id=f"/subscriptions/{client.subscription_id}/resourceGroups/cloudops-demo-rg",
-                        name="cloudops-demo-rg",
-                        type="Microsoft.Resources/resourceGroups",
-                        region="centralindia",
-                        status="Available",
-                        tags={},
-                        last_seen=datetime.utcnow()
-                    ))
-                    
-                    generic_resources = client.resource_client.resources.list_by_resource_group("cloudops-demo-rg")
-                    for res in generic_resources:
-                        if res.type == "Microsoft.Compute/virtualMachines":
+                    for group in client.resource_client.resource_groups.list():
+                        resources_to_add.append(Resource(
+                            id=group.name,
+                            provider_id=group.id,
+                            name=group.name,
+                            type="Microsoft.Resources/resourceGroups",
+                            region=group.location or "global",
+                            status="Discovered",
+                            tags=group.tags or {},
+                            last_seen=datetime.utcnow()
+                        ))
+
+                    specialized_types = {
+                        "microsoft.compute/virtualmachines",
+                        "microsoft.compute/disks",
+                        "microsoft.web/serverfarms",
+                    }
+                    for res in client.resource_client.resources.list():
+                        if (res.type or "").lower() in specialized_types:
                             continue
                         resources_to_add.append(Resource(
                             id=res.name,
                             provider_id=res.id,
                             name=res.name,
                             type=res.type,
-                            region=res.location,
-                            status="Available",
+                            region=res.location or "global",
+                            status="Discovered",
                             tags=res.tags or {},
                             last_seen=datetime.utcnow()
                         ))
                 except Exception as e:
-                    print(f"Error discovering generic resources: {e}")
+                    print(f"Error discovering subscription resources: {e}")
                     
+            if not resources_to_add:
+                raise RuntimeError("LIVE inventory synchronization returned no Azure resources")
+
             for r in resources_to_add:
                 existing = db.query(Resource).filter(Resource.id == r.id).first()
-                if not existing:
+                if existing:
+                    existing.provider_id = r.provider_id
+                    existing.name = r.name
+                    existing.type = r.type
+                    existing.region = r.region
+                    existing.status = r.status
+                    existing.tags = r.tags
+                    existing.last_seen = r.last_seen
+                else:
                     db.add(r)
             db.commit()
             

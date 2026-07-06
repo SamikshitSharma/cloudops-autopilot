@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from datetime import datetime, timedelta
 import logging
 
@@ -19,16 +19,15 @@ logger = logging.getLogger("LiveAzureClient")
 class LiveAzureClient(AzureClientAdapter):
     def __init__(self) -> None:
         self.subscription_id = os.getenv("AZURE_SUBSCRIPTION_ID", "00000000-0000-0000-0000-000000000000")
-        
-        # Instantiate fallback mock client
-        from cloud_adapter.mock_client import MockAzureClient
-        self.mock_fallback = MockAzureClient()
+        if self.subscription_id == "00000000-0000-0000-0000-000000000000":
+            raise RuntimeError("AZURE_SUBSCRIPTION_ID must be configured when CLOUD_MODE=LIVE")
         
         self.credential = None
         self.compute_client = None
         self.resource_client = None
         self.monitor_client = None
         self.web_client = None
+        self.last_error = None
         
         try:
             self.credential = DefaultAzureCredential()
@@ -37,15 +36,19 @@ class LiveAzureClient(AzureClientAdapter):
             self.monitor_client = MonitorManagementClient(self.credential, self.subscription_id)
             self.web_client = WebSiteManagementClient(self.credential, self.subscription_id)
             logger.info("LiveAzureClient successfully initialized Azure clients.")
-            self._failed_init = False
         except Exception as e:
-            logger.warning(f"Failed to initialize Azure SDK credentials: {e}. Will fall back to Mock mode for all operations.")
-            self._failed_init = True
+            self.last_error = f"Azure SDK initialization failed: {e}"
+            logger.error(self.last_error)
+            raise RuntimeError(self.last_error) from e
+
+    def _operation_failed(self, operation: str, error: Exception) -> RuntimeError:
+        self.last_error = f"Azure {operation} failed: {error}"
+        logger.error(self.last_error)
+        return RuntimeError(self.last_error)
 
     async def list_virtual_machines(self) -> List[VirtualMachineResource]:
         if not self.compute_client:
-            logger.warning("Compute client not initialized. Falling back to Mock mode for list_virtual_machines.")
-            return await self.mock_fallback.list_virtual_machines()
+            raise RuntimeError("Azure compute client is not initialized")
             
         vms: List[VirtualMachineResource] = []
         try:
@@ -60,7 +63,7 @@ class LiveAzureClient(AzureClientAdapter):
                             status_str = status.code.split("/")[-1] # Running, Stopped, Deallocated
                 except Exception as e:
                     logger.warning(f"Could not retrieve instance view status for VM {vm.name}: {e}")
-                    status_str = "Running"
+                    status_str = "Unknown"
                 
                 vms.append(VirtualMachineResource(
                     id=vm.name,
@@ -75,13 +78,11 @@ class LiveAzureClient(AzureClientAdapter):
                 ))
             return vms
         except Exception as e:
-            logger.warning(f"Error querying virtual machines from SDK: {e}. Falling back to Mock mode.")
-            return await self.mock_fallback.list_virtual_machines()
+            raise self._operation_failed("virtual machine discovery", e) from e
 
     async def list_unattached_disks(self) -> List[UnattachedDiskResource]:
         if not self.compute_client:
-            logger.warning("Compute client not initialized. Falling back to Mock mode for list_unattached_disks.")
-            return await self.mock_fallback.list_unattached_disks()
+            raise RuntimeError("Azure compute client is not initialized")
             
         disks: List[UnattachedDiskResource] = []
         try:
@@ -101,13 +102,11 @@ class LiveAzureClient(AzureClientAdapter):
                     ))
             return disks
         except Exception as e:
-            logger.warning(f"Error querying unattached disks from SDK: {e}. Falling back to Mock mode.")
-            return await self.mock_fallback.list_unattached_disks()
+            raise self._operation_failed("disk discovery", e) from e
 
     async def list_app_service_plans(self) -> List[AppServicePlanResource]:
         if not self.web_client:
-            logger.warning("Web client not initialized. Falling back to Mock mode for list_app_service_plans.")
-            return await self.mock_fallback.list_app_service_plans()
+            raise RuntimeError("Azure web client is not initialized")
             
         plans: List[AppServicePlanResource] = []
         try:
@@ -125,14 +124,14 @@ class LiveAzureClient(AzureClientAdapter):
                 ))
             return plans
         except Exception as e:
-            logger.warning(f"Error querying App Service Plans from SDK: {e}. Falling back to Mock mode.")
-            return await self.mock_fallback.list_app_service_plans()
+            raise self._operation_failed("App Service plan discovery", e) from e
 
     async def get_resource_telemetry(self, resource_id: str, time_window_hours: int) -> List[TelemetryMetricPoint]:
         resolved_id = await self._resolve_provider_id(resource_id)
-        if not self.monitor_client or not resolved_id.startswith("/"):
-            logger.warning(f"Monitor client not initialized or resource_id '{resolved_id}' is not a full provider path. Falling back to Mock telemetry.")
-            return await self.mock_fallback.get_resource_telemetry(resource_id, time_window_hours)
+        if not self.monitor_client:
+            raise RuntimeError("Azure Monitor client is not initialized")
+        if not resolved_id.startswith("/"):
+            raise ValueError(f"Resource '{resource_id}' could not be resolved to an Azure provider ID")
             
         metrics: List[TelemetryMetricPoint] = []
         try:
@@ -155,22 +154,22 @@ class LiveAzureClient(AzureClientAdapter):
             for item in metric_data.value:
                 for time_series in item.timeseries:
                     for data_point in time_series.data:
+                        if data_point.average is None:
+                            continue
                         metrics.append(TelemetryMetricPoint(
                             timestamp=data_point.time_stamp,
-                            cpu_percent=data_point.average if data_point.average is not None else 0.0,
+                            cpu_percent=data_point.average,
                             memory_bytes=0,
                             network_in_bytes=0,
                             network_out_bytes=0
                         ))
             return metrics
         except Exception as e:
-            logger.warning(f"Failed to query monitor metrics for {resource_id}: {e}. Falling back to Mock telemetry.")
-            return await self.mock_fallback.get_resource_telemetry(resource_id, time_window_hours)
+            raise self._operation_failed(f"Monitor metrics query for '{resource_id}'", e) from e
 
     async def get_cost_recommendations(self) -> List[Dict[str, Any]]:
         if not self.resource_client:
-            logger.warning("Resource client not initialized. Falling back to Mock cost recommendations.")
-            return await self.mock_fallback.get_cost_recommendations()
+            raise RuntimeError("Azure resource client is not initialized")
             
         recommendations: List[Dict[str, Any]] = []
         try:
@@ -189,47 +188,55 @@ class LiveAzureClient(AzureClientAdapter):
                 })
             return recommendations
         except Exception as e:
-            logger.warning(f"Error fetching Advisor recommendations from SDK: {e}. Falling back to Mock recommendations.")
-            return await self.mock_fallback.get_cost_recommendations()
+            raise self._operation_failed("Advisor recommendation query", e) from e
 
     async def stop_virtual_machine(self, resource_id: str) -> bool:
         resolved_id = await self._resolve_provider_id(resource_id)
         if not self.compute_client or not resolved_id.startswith("/"):
-            logger.warning(f"Compute client not initialized or resource_id '{resolved_id}' is not a provider path. Falling back to Mock VM stop.")
-            return await self.mock_fallback.stop_virtual_machine(resource_id)
-            
+            raise ValueError(f"VM '{resource_id}' could not be resolved to an Azure provider ID")
         try:
             rg = self._extract_resource_group(resolved_id)
             vm_name = resolved_id.split("/")[-1]
-            poller = self.compute_client.virtual_machines.begin_power_off(rg, vm_name)
-            poller.result() # Wait for execution completion
+            self.compute_client.virtual_machines.begin_deallocate(rg, vm_name).result()
             return True
         except Exception as e:
-            logger.warning(f"Failed to power off VM {resource_id}: {e}. Falling back to Mock VM stop.")
-            return await self.mock_fallback.stop_virtual_machine(resource_id)
+            raise self._operation_failed(f"VM deallocation for '{resource_id}'", e) from e
 
-    async def stop_app_service_plan(self, resource_id: str) -> bool:
+    async def start_virtual_machine(self, resource_id: str) -> bool:
         resolved_id = await self._resolve_provider_id(resource_id)
-        if not self.web_client or not resolved_id.startswith("/"):
-            logger.warning(f"Web client not initialized or resource_id '{resolved_id}' is not a provider path. Falling back to Mock App Service Plan stop.")
-            return await self.mock_fallback.stop_app_service_plan(resource_id)
-            
+        if not self.compute_client or not resolved_id.startswith("/"):
+            raise ValueError(f"VM '{resource_id}' could not be resolved to an Azure provider ID")
         try:
             rg = self._extract_resource_group(resolved_id)
-            plan_name = resolved_id.split("/")[-1]
-            plan = self.web_client.app_service_plans.get(rg, plan_name)
-            if plan:
-                return True
-            return False
+            vm_name = resolved_id.split("/")[-1]
+            self.compute_client.virtual_machines.begin_start(rg, vm_name).result()
+            return True
         except Exception as e:
-            logger.warning(f"Failed to stop App Service Plan {resource_id}: {e}. Falling back to Mock App Service Plan stop.")
-            return await self.mock_fallback.stop_app_service_plan(resource_id)
+            raise self._operation_failed(f"VM start for '{resource_id}'", e) from e
+
+    async def resize_virtual_machine(self, resource_id: str, vm_size: str) -> bool:
+        resolved_id = await self._resolve_provider_id(resource_id)
+        if not self.compute_client or not resolved_id.startswith("/"):
+            raise ValueError(f"VM '{resource_id}' could not be resolved to an Azure provider ID")
+        try:
+            rg = self._extract_resource_group(resolved_id)
+            vm_name = resolved_id.split("/")[-1]
+            vm = self.compute_client.virtual_machines.get(rg, vm_name)
+            vm.hardware_profile.vm_size = vm_size
+            self.compute_client.virtual_machines.begin_create_or_update(rg, vm_name, vm).result()
+            return True
+        except Exception as e:
+            raise self._operation_failed(f"VM resize for '{resource_id}'", e) from e
+
+    async def stop_app_service_plan(self, resource_id: str) -> bool:
+        raise NotImplementedError(
+            "Azure App Service Plans cannot be stopped directly; stop hosted apps or scale the plan explicitly."
+        )
 
     async def delete_unattached_disk(self, resource_id: str) -> bool:
         resolved_id = await self._resolve_provider_id(resource_id)
         if not self.compute_client or not resolved_id.startswith("/"):
-            logger.warning(f"Compute client not initialized or resource_id '{resolved_id}' is not a provider path. Falling back to Mock disk delete.")
-            return await self.mock_fallback.delete_unattached_disk(resource_id)
+            raise ValueError(f"Disk '{resource_id}' could not be resolved to an Azure provider ID")
             
         try:
             rg = self._extract_resource_group(resolved_id)
@@ -238,16 +245,15 @@ class LiveAzureClient(AzureClientAdapter):
             poller.result()
             return True
         except Exception as e:
-            logger.warning(f"Failed to delete disk {resource_id}: {e}. Falling back to Mock disk delete.")
-            return await self.mock_fallback.delete_unattached_disk(resource_id)
+            raise self._operation_failed(f"disk deletion for '{resource_id}'", e) from e
 
     def _extract_resource_group(self, provider_id: str) -> str:
         parts = provider_id.split("/")
         try:
             rg_idx = parts.index("resourceGroups")
             return parts[rg_idx + 1]
-        except (ValueError, IndexError):
-            return "default-rg"
+        except (ValueError, IndexError) as e:
+            raise ValueError(f"Azure provider ID does not contain a resource group: {provider_id}") from e
 
     async def _resolve_provider_id(self, resource_id: str) -> str:
         if not resource_id or resource_id.startswith("/"):
@@ -265,19 +271,17 @@ class LiveAzureClient(AzureClientAdapter):
             if plan.name == resource_id or plan.id == resource_id:
                 return plan.provider_id
                 
-        # Try to resolve against generic resources in cloudops-demo-rg
+        # Resolve against the configured Azure subscription inventory.
         if self.resource_client:
             try:
-                resources = self.resource_client.resources.list_by_resource_group("cloudops-demo-rg")
+                resources = self.resource_client.resources.list()
                 for res in resources:
                     if res.name == resource_id:
                         return res.id
-            except Exception:
-                pass
+            except Exception as e:
+                raise self._operation_failed(f"resource resolution for '{resource_id}'", e) from e
                 
         return resource_id
 
     def get_mode(self) -> str:
-        if hasattr(self, "_failed_init") and self._failed_init:
-            return "HYBRID"
         return "LIVE"

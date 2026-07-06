@@ -17,12 +17,8 @@ def get_azure_client() -> AzureClientAdapter:
     logger.info(f"Initializing cloud client adapter in mode: {mode}")
 
     if mode == "LIVE":
-        try:
-            from cloud_adapter.live_client import LiveAzureClient
-            _cached_client = LiveAzureClient()
-        except Exception as e:
-            logger.error(f"Failed to load LiveAzureClient, falling back to MockAzureClient: {e}")
-            _cached_client = MockAzureClient()
+        from cloud_adapter.live_client import LiveAzureClient
+        _cached_client = LiveAzureClient()
     else:
         _cached_client = MockAzureClient()
 

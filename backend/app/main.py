@@ -271,31 +271,53 @@ v1_router.include_router(workflows_router)
 
 @v1_router.get("/health", response_model=APIResponse, tags=["Health"])
 async def check_health(db: Session = Depends(get_db)):
-    """Verifies service status and database engine connectivity."""
+    """Report database and configured cloud-adapter health without mode substitution."""
     db_status = "healthy"
     try:
         db.execute(text("SELECT 1"))
-    except Exception as e:
-        logger.error(f"HealthCheck database connection failed: {e}")
+    except Exception as exc:
+        logger.error("Database health check failed: %s", exc)
         db_status = "unhealthy"
 
-    from cloud_adapter import get_azure_client
-    cloud_mode = get_azure_client().get_mode()
+    cloud_mode = settings.CLOUD_MODE.upper()
+    cloud_status = "healthy" if cloud_mode == "MOCK" else "unavailable"
+    cloud_error = None
+    try:
+        from cloud_adapter import get_azure_client
+        client = get_azure_client()
+        cloud_mode = client.get_mode()
+        cloud_error = getattr(client, "last_error", None)
+        if cloud_mode == "LIVE":
+            subscription_marker = f"/subscriptions/{client.subscription_id}/"
+            discovered = db.query(DBResource).filter(
+                DBResource.provider_id.ilike(f"%{subscription_marker}%")
+            ).count()
+            if cloud_error:
+                cloud_status = "degraded"
+            elif discovered > 0:
+                cloud_status = "healthy"
+            else:
+                cloud_status = "unavailable"
+                cloud_error = "No resources have been synchronized from the configured Azure subscription."
+    except Exception as exc:
+        cloud_error = str(exc)
+        logger.error("Cloud adapter health check failed: %s", exc)
 
+    service_healthy = db_status == "healthy" and cloud_status == "healthy"
     health_info = HealthDTO(
-        status="healthy" if db_status == "healthy" else "unhealthy",
+        status="healthy" if service_healthy else "unhealthy",
         database=db_status,
-        cloud_mode=cloud_mode
+        cloud_mode=cloud_mode,
+        cloud_status=cloud_status,
+        cloud_error=cloud_error,
     )
-    
-    status_code = 200 if db_status == "healthy" else 503
     return JSONResponse(
-        status_code=status_code,
+        status_code=200 if service_healthy else 503,
         content=make_response(
-            success=(db_status == "healthy"),
+            success=service_healthy,
             message="Health check completed",
-            data=health_info.model_dump()
-        ).model_dump(mode="json")
+            data=health_info.model_dump(),
+        ).model_dump(mode="json"),
     )
 
 @v1_router.get("/runs", response_model=APIResponse, tags=["Runs"])
@@ -436,67 +458,63 @@ async def get_run_details(run_id: str, db: Session = Depends(get_db)):
     }
     return make_response(True, "Run details retrieved successfully", data)
 
+def _resource_query(db: Session):
+    """Scope inventory reads to the configured Azure subscription in LIVE mode."""
+    query = db.query(DBResource)
+    if settings.CLOUD_MODE.upper() == "LIVE":
+        from cloud_adapter import get_azure_client
+        client = get_azure_client()
+        marker = f"/subscriptions/{client.subscription_id}/"
+        query = query.filter(DBResource.provider_id.ilike(f"%{marker}%"))
+    return query
+
+
 def _enrich_resource_dto(r: DBResource) -> dict:
-    """Enrich a resource with latest telemetry and cost estimate."""
-    from backend.app.models.resource import TelemetryHistory
+    """Expose only persisted Azure facts; unavailable metrics remain explicit nulls."""
     dto = ResourceDTO.model_validate(r).model_dump()
-    # Get latest telemetry for utilization
-    latest_telemetry = (
-        sorted(r.telemetry, key=lambda x: x.timestamp)[-1] if r.telemetry else None
-    )
-    
-    dto["cpu_utilization"] = None
-    dto["memory_utilization"] = None
-    dto["disk_utilization"] = None
-    dto["network_utilization"] = None
-    dto["telemetry_explanation"] = None
-    
-    t = r.type.lower()
-    is_vm = "virtualmachine" in t or "vm" in t
-    
-    if latest_telemetry:
-        dto["utilization"] = round(latest_telemetry.cpu_percent, 1)
-        dto["cpu_utilization"] = round(latest_telemetry.cpu_percent, 1)
-        
-        # Determine memory utilization: if memory_bytes represents percentage (<100) or bytes (out of 8GB)
-        if latest_telemetry.memory_bytes < 100:
-            dto["memory_utilization"] = float(latest_telemetry.memory_bytes)
-        else:
-            dto["memory_utilization"] = round((latest_telemetry.memory_bytes / (8 * 1024 * 1024 * 1024)) * 100, 1)
-        dto["memory_utilization"] = min(100.0, max(0.0, dto["memory_utilization"]))
-        
-        dto["disk_utilization"] = 34.5 # Simulated disk usage
-        net_total = latest_telemetry.network_in_bytes + latest_telemetry.network_out_bytes
-        if net_total < 100:
-            dto["network_utilization"] = float(net_total)
-        else:
-            dto["network_utilization"] = round(min(100.0, (net_total / (100 * 1024 * 1024)) * 100), 1)
+    latest_telemetry = max(r.telemetry, key=lambda item: item.timestamp) if r.telemetry else None
+
+    dto.update({
+        "utilization": None,
+        "cpu_utilization": None,
+        "memory_utilization": None,
+        "disk_utilization": None,
+        "network_utilization": None,
+        "monthly_cost": None,
+        "metric_source": None,
+        "telemetry_explanation": None,
+        "cost_explanation": "Azure cost data has not been collected for this resource.",
+    })
+
+    resource_type = r.type.lower()
+    supports_cpu = "virtualmachine" in resource_type or "serverfarms" in resource_type
+    if latest_telemetry and supports_cpu:
+        cpu = round(latest_telemetry.cpu_percent, 1)
+        dto["utilization"] = cpu
+        dto["cpu_utilization"] = cpu
+        dto["metric_source"] = "Azure Monitor"
+        dto["telemetry_explanation"] = "CPU utilization is the latest persisted Azure Monitor sample."
+    elif supports_cpu:
+        dto["telemetry_explanation"] = "Azure Monitor returned no CPU samples for this resource."
     else:
-        dto["utilization"] = None
-        dto["telemetry_explanation"] = "Telemetry unavailable because Azure Monitor metrics are not found for this resource"
-            
-    # Estimate monthly cost from resource type (Azure pricing approximation)
-    if "virtualmachine" in t or "vm" in t:
-        dto["monthly_cost"] = 145.00
-    elif "disk" in t or "storage" in t:
-        dto["monthly_cost"] = 32.50
-    elif "network" in t or "publicipaddress" in t:
-        dto["monthly_cost"] = 18.00
-    elif "appservice" in t or "webapps" in t:
-        dto["monthly_cost"] = 55.00
-    elif "sql" in t or "database" in t:
-        dto["monthly_cost"] = 210.00
+        dto["telemetry_explanation"] = "CPU utilization is not an applicable metric for this Azure resource type."
+
+    status = (r.status or "unknown").lower()
+    if status in {"running", "available", "active", "ready", "ok", "discovered", "online"}:
+        dto["health"] = "healthy"
+    elif status in {"unknown"}:
+        dto["health"] = "unknown"
     else:
-        dto["monthly_cost"] = 45.00
+        dto["health"] = "inactive"
+
     dto["provider"] = "azure"
-    dto["health"] = "healthy" if r.status.lower() in ("running", "available", "active", "ready", "ok") else "degraded"
     dto["last_updated"] = r.last_seen
     return dto
 
 @v1_router.get("/resources", response_model=APIResponse, tags=["Resources"])
 async def list_resources(q: Optional[str] = None, db: Session = Depends(get_db)):
     """Lists all cloud resources discovered during inventory sweeps."""
-    query = db.query(DBResource)
+    query = _resource_query(db)
     if q:
         query = query.filter(DBResource.name.contains(q) | DBResource.type.contains(q))
     resources = query.all()
@@ -506,7 +524,7 @@ async def list_resources(q: Optional[str] = None, db: Session = Depends(get_db))
 @v1_router.get("/resources/export", tags=["Resources"])
 async def export_resources(format: str = "csv", q: Optional[str] = None, db: Session = Depends(get_db)):
     """Exports discovered cloud resources in CSV or JSON format."""
-    query = db.query(DBResource)
+    query = _resource_query(db)
     if q:
         query = query.filter(DBResource.name.contains(q) | DBResource.type.contains(q))
     resources = query.all()
@@ -545,7 +563,7 @@ async def export_resources(format: str = "csv", q: Optional[str] = None, db: Ses
 @v1_router.get("/resources/{resource_id}", response_model=APIResponse, tags=["Resources"])
 async def get_resource(resource_id: str, db: Session = Depends(get_db)):
     """Retrieves config properties and metadata for a single resource."""
-    res = db.query(DBResource).filter(DBResource.id == resource_id).first()
+    res = _resource_query(db).filter(DBResource.id == resource_id).first()
     if not res:
         raise HTTPException(status_code=404, detail=f"Resource '{resource_id}' not found")
     return make_response(True, "Resource retrieved successfully", _enrich_resource_dto(res))
@@ -844,7 +862,7 @@ async def search_endpoint(q: str = Query(..., min_length=1), db: Session = Depen
     pattern = f"%{q}%"
     from backend.app.models.workflow import SequentialWorkflow, WorkflowEventLog
     
-    resources = db.query(DBResource).filter(
+    resources = _resource_query(db).filter(
         DBResource.name.like(pattern) | DBResource.type.like(pattern) | DBResource.region.like(pattern)
     ).limit(5).all()
     
@@ -889,203 +907,119 @@ async def search_endpoint(q: str = Query(..., min_length=1), db: Session = Depen
 
 @v1_router.get("/topology", response_model=APIResponse, tags=["Resources"])
 async def get_topology(db: Session = Depends(get_db)):
-    """Generates the dynamic Infrastructure and Agent dependency topologies."""
-    from shared.config import settings
+    """Build topology only from synchronized Azure provider IDs and workflow state."""
+    from backend.app.models.workflow import SequentialWorkflow
+    from backend.app.workflow.agent_registry import global_agent_registry
     from cloud_adapter import get_azure_client
-    
+
     client = get_azure_client()
     mode = client.get_mode()
-    
-    # If live mode and SDK authentication failed entirely, raise actual backend reason
-    if settings.CLOUD_MODE == "LIVE" and getattr(client, "_failed_init", False):
-        return make_response(False, "Topology unavailable: live Azure SDK authentication failed.", {
-            "error_detail": "DefaultAzureCredential failed to acquire token. Please verify AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET environment variables or log in via Azure CLI.",
+    resources = _resource_query(db).all()
+
+    if mode == "LIVE" and not resources:
+        return make_response(False, "Topology unavailable: no synchronized Azure inventory.", {
+            "error_detail": getattr(client, "last_error", None) or "Run a successful Azure inventory synchronization.",
             "infrastructure": {"nodes": [], "edges": []},
-            "agent": {"nodes": [], "edges": []}
+            "agent": {"nodes": [], "edges": []},
         })
-        
-    # Query discovered resources
-    resources = db.query(DBResource).all()
-    
-    # 1. BUILD INFRASTRUCTURE TOPOLOGY
-    infra_nodes = []
+
+    subscription_id = getattr(client, "subscription_id", "mock-subscription")
+    infra_nodes = [{
+        "id": f"subscription:{subscription_id}",
+        "label": subscription_id,
+        "type": "Subscription",
+        "health": "healthy",
+        "details": f"{mode} Azure subscription",
+        "metadata": {"subscription_id": subscription_id, "source": mode},
+    }]
     infra_edges = []
-    
-    # Static Hub Infrastructure
-    infra_nodes.append({
-        "id": "vnet-prod",
-        "label": "vnet-prod-eastus",
-        "type": "VNet",
-        "health": "healthy",
-        "details": "Azure Virtual Network (10.0.0.0/16)"
-    })
-    infra_nodes.append({
-        "id": "subnet-app",
-        "label": "subnet-app (10.0.1.0/24)",
-        "type": "Subnet",
-        "health": "healthy",
-        "details": "Application Tier Subnet"
-    })
-    infra_edges.append({"source": "subnet-app", "target": "vnet-prod", "type": "contains"})
-    
-    infra_nodes.append({
-        "id": "subnet-db",
-        "label": "subnet-db (10.0.2.0/24)",
-        "type": "Subnet",
-        "health": "healthy",
-        "details": "Database Tier Subnet"
-    })
-    infra_edges.append({"source": "subnet-db", "target": "vnet-prod", "type": "contains"})
-    
-    infra_nodes.append({
-        "id": "nsg-prod",
-        "label": "nsg-prod-rules",
-        "type": "NSG",
-        "health": "healthy",
-        "details": "Security Group (Ports 80/443 open, 22 restricted)"
-    })
-    infra_edges.append({"source": "nsg-prod", "target": "subnet-app", "type": "routes"})
-    
-    infra_nodes.append({
-        "id": "lb-prod",
-        "label": "lb-prod-frontend",
-        "type": "LoadBalancer",
-        "health": "healthy",
-        "details": "Public Load Balancer"
-    })
-    
-    infra_nodes.append({
-        "id": "db-prod-sql",
-        "label": "db-prod-sql",
-        "type": "Database",
-        "health": "healthy",
-        "details": "Azure SQL Serverless (General Purpose)"
-    })
-    infra_edges.append({"source": "db-prod-sql", "target": "subnet-db", "type": "dependency"})
-    
-    infra_nodes.append({
-        "id": "kv-prod-keys",
-        "label": "kv-prod-secrets",
-        "type": "KeyVault",
-        "health": "healthy",
-        "details": "Azure Key Vault (Premium Keys HSM)"
-    })
-    
-    infra_nodes.append({
-        "id": "st-prod-logs",
-        "label": "stprodlogs",
-        "type": "Storage",
-        "health": "healthy",
-        "details": "Azure Blob Storage Account (Standard LRS)"
-    })
-    
-    # Dynamic Discovered Resources
-    for r in resources:
-        r_type = r.type.lower()
-        health_status = "healthy" if r.status.lower() in ("running", "available", "active", "ready", "ok") else "degraded"
-        
-        if "virtualmachines" in r_type or "vm" in r_type:
-            # VM Node
+    group_nodes = set()
+
+    for resource in resources:
+        provider_id = resource.provider_id or ""
+        parts = [part for part in provider_id.split("/") if part]
+        lower_parts = [part.lower() for part in parts]
+        group_name = None
+        if "resourcegroups" in lower_parts:
+            group_index = lower_parts.index("resourcegroups")
+            if group_index + 1 < len(parts):
+                group_name = parts[group_index + 1]
+
+        if group_name and group_name not in group_nodes:
+            group_nodes.add(group_name)
             infra_nodes.append({
-                "id": r.id,
-                "label": r.name,
-                "type": "VM",
-                "health": health_status,
-                "details": f"Virtual Machine ({r.status})"
-            })
-            
-            # NIC Node
-            nic_id = f"nic-{r.id}"
-            infra_nodes.append({
-                "id": nic_id,
-                "label": f"nic-{r.name}",
-                "type": "NIC",
+                "id": f"resource-group:{group_name}",
+                "label": group_name,
+                "type": "ResourceGroup",
                 "health": "healthy",
-                "details": f"Network Interface for {r.name}"
+                "details": "Azure resource group discovered from provider ID",
+                "metadata": {"source": provider_id},
             })
-            infra_edges.append({"source": r.id, "target": nic_id, "type": "dependency"})
-            infra_edges.append({"source": nic_id, "target": "subnet-app", "type": "dependency"})
-            infra_edges.append({"source": "lb-prod", "target": r.id, "type": "routes"})
-            
-            # Public IP for VM
-            pip_id = f"pip-{r.id}"
-            infra_nodes.append({
-                "id": pip_id,
-                "label": f"pip-{r.name}",
-                "type": "PublicIP",
-                "health": "healthy",
-                "details": f"Public IP Address for {r.name}"
+            infra_edges.append({
+                "source": f"resource-group:{group_name}",
+                "target": f"subscription:{subscription_id}",
+                "type": "contains",
             })
-            infra_edges.append({"source": nic_id, "target": pip_id, "type": "dependency"})
-            
-            # Connections to core services
-            infra_edges.append({"source": r.id, "target": "db-prod-sql", "type": "dependency"})
-            infra_edges.append({"source": r.id, "target": "kv-prod-keys", "type": "dependency"})
-            infra_edges.append({"source": r.id, "target": "st-prod-logs", "type": "dependency"})
-            
-        elif "serverfarms" in r_type or "appservice" in r_type:
-            infra_nodes.append({
-                "id": r.id,
-                "label": r.name,
-                "type": "AppService",
-                "health": health_status,
-                "details": f"App Service Plan ({r.status})"
-            })
-            infra_edges.append({"source": r.id, "target": "db-prod-sql", "type": "dependency"})
-            
-    # 2. BUILD AGENT TOPOLOGY (REACTIVE TO RUNNING STATE)
-    from backend.app.models.workflow import SequentialWorkflow
-    latest_wf = db.query(SequentialWorkflow).order_by(SequentialWorkflow.created_at.desc()).first()
-    stage_statuses = {s.stage_id: s.status for s in latest_wf.stages} if latest_wf else {}
-    
-    agent_contract_list = [
-        ("executive_orchestrator", "Executive Agent", "Orchestration & Objectives"),
-        ("inventory_agent", "Inventory Agent", "Asset Discovery & Sync"),
-        ("telemetry_agent", "Telemetry Agent", "Metrics & Monitor API Logs"),
-        ("analysis_agent", "Analysis Agent", "Anomaly & Idle Resource Identification"),
-        ("recommendation_agent", "Recommendation Agent", "Dynamic Optimizations Planner"),
-        ("risk_assessment_agent", "Risk Agent", "Security, Impact & Compliance Gates"),
-        ("approval_agent", "Approval Agent", "Human-in-the-loop Guardrails Queue"),
-        ("execution_agent", "Execution Agent", "Azure Resource State Remediation"),
-        ("audit_agent", "Audit Agent", "Ledger Logs & Cryptographic Integrity")
-    ]
-    
+
+        if (resource.type or "").lower() == "microsoft.resources/resourcegroups":
+            continue
+
+        status = (resource.status or "unknown").lower()
+        health = "healthy" if status in {
+            "running", "available", "active", "ready", "ok", "discovered", "online"
+        } else ("unknown" if status == "unknown" else "inactive")
+        infra_nodes.append({
+            "id": resource.id,
+            "label": resource.name,
+            "type": resource.type,
+            "health": health,
+            "details": f"{resource.type} in {resource.region}; status {resource.status}",
+            "metadata": {
+                "provider_id": provider_id,
+                "region": resource.region,
+                "status": resource.status,
+                "tags": resource.tags,
+                "last_seen": resource.last_seen.isoformat() if resource.last_seen else None,
+            },
+        })
+        infra_edges.append({
+            "source": resource.id,
+            "target": f"resource-group:{group_name}" if group_name else f"subscription:{subscription_id}",
+            "type": "contains",
+        })
+
+    latest_workflow = db.query(SequentialWorkflow).filter(
+        SequentialWorkflow.execution_mode == mode
+    ).order_by(SequentialWorkflow.created_at.desc()).first()
+    stage_statuses = {
+        stage.stage_id: stage.status for stage in latest_workflow.stages
+    } if latest_workflow else {}
+
+    contracts = global_agent_registry.list_stages_sorted()
     agent_nodes = []
     agent_edges = []
-    
-    for idx, (stage_id, label, details) in enumerate(agent_contract_list):
-        status = stage_statuses.get(stage_id, "pending")
-        if status == "success":
-            health = "healthy"
-        elif status == "running":
-            health = "running"
-        elif status == "failed":
-            health = "failing"
-        else:
-            health = "pending"
-            
+    for index, contract in enumerate(contracts):
+        status = stage_statuses.get(contract.stage_id, "pending")
         agent_nodes.append({
-            "id": stage_id,
-            "label": label,
+            "id": contract.stage_id,
+            "label": contract.stage_name,
             "type": "Agent",
-            "health": health,
-            "details": f"{details} (Status: {status})"
+            "health": status,
+            "details": f"Persisted workflow stage status: {status}",
+            "metadata": {"workflow_id": latest_workflow.id if latest_workflow else None},
         })
-        
-        # Link to the next agent sequentially
-        if idx < len(agent_contract_list) - 1:
-            next_stage_id = agent_contract_list[idx + 1][0]
-            agent_edges.append({"source": stage_id, "target": next_stage_id, "type": "agent_flow"})
-        else:
-            # Loop back to Executive Orchestrator
-            agent_edges.append({"source": stage_id, "target": "executive_orchestrator", "type": "agent_flow"})
-            
-    topology_data = {
+        if index:
+            agent_edges.append({
+                "source": contracts[index - 1].stage_id,
+                "target": contract.stage_id,
+                "type": "agent_flow",
+            })
+
+    return make_response(True, "Topology generated from synchronized backend state.", {
         "infrastructure": {"nodes": infra_nodes, "edges": infra_edges},
-        "agent": {"nodes": agent_nodes, "edges": agent_edges}
-    }
-    
-    return make_response(True, "Topology retrieved successfully", topology_data)
+        "agent": {"nodes": agent_nodes, "edges": agent_edges},
+        "relationship_note": "Infrastructure edges represent Azure provider-ID containment only; no dependencies are inferred.",
+    })
 
 def fallback_rule_based_ai(query: str, resources, recommendations, workflows, audit_logs, selected_resource_id: Optional[str] = None, context_url: Optional[str] = None) -> str:
     q = query.lower()
@@ -1095,11 +1029,22 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
         r = next((x for x in resources if x.id == selected_resource_id or x.name == selected_resource_id), None)
         if r:
             reco = next((x for x in recommendations if x.resource_id == r.id), None)
-            reco_text = f" and has a pending cost optimization recommendation to {reco.action_type.upper()} it (saving ${reco.saving_amount:.2f}/mo)" if reco else " and is operating within healthy parameters with no optimization recommendations pending"
+            if reco:
+                saving = f"${reco.saving_amount:.2f}/mo" if reco.saving_amount is not None else "unavailable"
+                reco_text = f" and has a pending cost optimization recommendation to {reco.action_type.upper()} it (saving {saving})"
+            else:
+                reco_text = " and has no pending optimization recommendation in the backend record"
+
+            cpu_value = getattr(r, "cpu_utilization", None)
+            if cpu_value is None:
+                cpu_value = getattr(r, "utilization", None)
+            cpu_text = f"{cpu_value}%" if cpu_value is not None else "unavailable (Azure telemetry has not been collected)"
+            cost_value = getattr(r, "monthly_cost", None)
+            cost_text = f"${cost_value:.2f}/mo" if cost_value is not None else "unavailable (Azure cost data has not been collected)"
             return (
                 f"Resource '{r.id}' is a '{r.type}' in region '{r.region}' with current status '{r.status}'.\n"
-                f"- CPU Utilization: {getattr(r, 'cpu_utilization', None) or r.utilization or 'N/A'}%\n"
-                f"- Monthly Cost: ${r.monthly_cost or 0.0:.2f}/mo\n"
+                f"- CPU Utilization: {cpu_text}\n"
+                f"- Monthly Cost: {cost_text}\n"
                 f"It is currently under observation{reco_text}."
             )
 
@@ -1108,12 +1053,15 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
         target_vm = selected_resource_id
         if not target_vm:
             stopped = [r.id for r in resources if "virtualmachine" in r.type.lower() and r.status.lower() in ("stopped", "deallocated")]
-            target_vm = stopped[0] if stopped else "vm-idle-01"
+            target_vm = stopped[0] if stopped else None
+        if not target_vm:
+            return "I do not have a stopped or deallocated VM in the synchronized backend inventory to explain."
             
         reco = next((r for r in recommendations if r.resource_id == target_vm), None)
-        saving_text = f"saving ${reco.saving_amount}/mo" if reco else "saving $50/mo"
-        rationale = reco.rationale if reco else "its average CPU utilization was 2.5% over the observation window (well below the 5% threshold)"
-        return f"Virtual Machine '{target_vm}' was stopped because {rationale}, realizing a cost savings of {saving_text}. The stop sequence was fully evaluated and approved."
+        if not reco:
+            return f"I do not have recommendation evidence explaining why Virtual Machine '{target_vm}' was stopped."
+        saving_text = f"saving ${reco.saving_amount:.2f}/mo" if reco.saving_amount is not None else "with savings unavailable"
+        return f"Virtual Machine '{target_vm}' was stopped because {reco.rationale}, realizing a cost savings of {saving_text}. The stop sequence was evaluated through the recorded workflow and approval data."
 
     # 2. What changed today? / Compare yesterday vs today
     if "change" in q or "compare" in q or "yesterday" in q:
@@ -1123,7 +1071,7 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
         realized_savings = sum(r.saving_amount for r in recommendations if r.status in ("approved", "remediated", "executed"))
         return (
             f"Comparing yesterday vs today:\n"
-            f"- Discovered resources under managed observation: {len(resources)} (operating within standard thresholds).\n"
+            f"- Discovered resources in synchronized backend inventory: {len(resources)}.\n"
             f"- Completed optimization sweeps today: {completed_wfs} successfully finished run(s).\n"
             f"- Running/pending workflow runs: {running_wfs} active orchestrations.\n"
             f"- Active optimization recommendations: {active_recos} cost reduction proposals.\n"
@@ -1132,12 +1080,11 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
 
     # 3. Why confidence dropped?
     if "confidence" in q and ("drop" in q or "low" in q or "why" in q):
-        return (
-            "Causal reasoning confidence dropped slightly because of higher volatility during the Telemetry Agent's "
-            "metrics aggregation phase. There was a transient network latency spike on the Azure Monitor API, "
-            "causing the telemetry confidence sub-metric to drop to 85% compared to its normal 98% level. "
-            "The system automatically flagged the reading but proceeded once the safety gate cleared."
-        )
+        low_confidence = [r for r in recommendations if getattr(r, "confidence_score", None) is not None and r.confidence_score < 0.8]
+        if low_confidence:
+            ids = ", ".join(r.id for r in low_confidence[:5])
+            return f"The backend has {len(low_confidence)} recommendation(s) with confidence below 0.80: {ids}. Check the recorded reasoning and evidence for each item."
+        return "I do not have a recorded confidence-drop event in the backend data currently in scope."
 
     # 4. What failed? / Show failed workflows
     if "fail" in q:
@@ -1156,7 +1103,7 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
                 highest_savings = wf_savings
                 highest_wf = w.id
         if highest_wf:
-            return f"Workflow '{highest_wf}' saved the most money, realizing ${highest_savings:.2f}/month in estimated cost reduction by stop/resize actions."
+            return f"Workflow '{highest_wf}' has the highest recorded savings total: ${highest_savings:.2f}/month."
         return "No workflow runs with savings are currently recorded in the database."
 
     # 6. Explain recommendation #15 (or any reco ID lookup)
@@ -1175,7 +1122,7 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
         if reco_item:
             return (
                 f"Recommendation '{reco_item.id}': Proposed action is '{reco_item.action_type.upper()}' on resource '{reco_item.resource_id}'.\n"
-                f"- Estimated Monthly Savings: ${reco_item.saving_amount:.2f}/mo\n"
+                f"- Recorded Monthly Savings: ${reco_item.saving_amount:.2f}/mo\n"
                 f"- Risk Level: {reco_item.risk_level.upper()}\n"
                 f"- Rationale: {reco_item.rationale}\n"
                 f"- Current Status: {reco_item.status.upper()}"
@@ -1191,10 +1138,10 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
         return (
             f"Azure Inventory Summary:\n"
             f"- Total Managed Resources: {len(resources)}\n"
-            f"- Virtual Machines: {len(vms)} active instances\n"
-            f"- Unattached Disks: {len(disks)} orphaned storage resources\n"
-            f"- App Service Plans: {len(plans)} compute tiers\n"
-            f"- Active Regions: {', '.join(regions)}"
+            f"- Virtual Machine resources: {len(vms)}\n"
+            f"- Disk resources: {len(disks)}\n"
+            f"- App Service Plan resources: {len(plans)}\n"
+            f"- Regions: {', '.join(regions) if regions else 'none recorded'}"
         )
 
     # Standard Fallbacks
@@ -1203,13 +1150,13 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
         if idle_recos:
             reco = idle_recos[0]
             res_name = reco.resource_id
+            evidence = getattr(reco, "evidence", None) or "No separate evidence field was recorded."
             return (
-                f"The Virtual Machine '{res_name}' was classified as idle/underutilized "
-                f"because its historical metrics showed average CPU utilization of 2.5% (well below the "
-                f"system threshold of 5.0%) and memory utilization averaging 15% over the observation window. "
-                f"Azure Advisor and our Telemetry Agent both confirmed zero active load, and no tags exist "
-                f"to exempt this resource from cost-saving policy sweeps. Stopping or resizing this instance is "
-                f"recommended to eliminate this waste."
+                f"Resource '{res_name}' is flagged by recommendation '{reco.id}'.\n"
+                f"- Action: {reco.action_type.upper()}\n"
+                f"- Rationale: {reco.rationale}\n"
+                f"- Evidence: {evidence}\n"
+                f"- Recorded monthly savings: ${reco.saving_amount:.2f}/mo"
             )
         return "I analyzed the resources but couldn't find any currently flagged as idle or underutilized in the active recommendations database."
 
@@ -1221,7 +1168,7 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
         return "Here is a summary of the latest audit ledger records:\n" + ("\n".join(audit_summary) if audit_summary else "Audit ledger is currently empty.")
         
     return (
-        f"I am the CloudOps Autopilot AI Assistant. I have context on {len(resources)} active resources, "
+        f"I am the CloudOps Autopilot AI Assistant. I have context on {len(resources)} synchronized resources, "
         f"{len(recommendations)} optimization proposals, and {len(workflows)} workflow runs.\n"
         f"You can ask me questions like:\n"
         f"- 'Why is this VM stopped?'\n"
@@ -1234,7 +1181,7 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
 @v1_router.post("/ask-ai", response_model=APIResponse, tags=["AI"])
 async def ask_ai(payload: AskAIRequest, db: Session = Depends(get_db)):
     """Answers operator queries about cloud resources, optimization runs, policy status, and audit ledgers."""
-    resources = db.query(DBResource).all()
+    resources = _resource_query(db).all()
     recommendations = db.query(DBRecommendation).all()
     from backend.app.models.workflow import SequentialWorkflow
     workflows = db.query(SequentialWorkflow).all()

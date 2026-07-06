@@ -35,6 +35,16 @@ class AzureClientAdapter(ABC):
         pass
 
     @abstractmethod
+    async def start_virtual_machine(self, resource_id: str) -> bool:
+        """Start a target VM. Used for explicit actions and rollback."""
+        pass
+
+    @abstractmethod
+    async def resize_virtual_machine(self, resource_id: str, vm_size: str) -> bool:
+        """Resize a target VM to an explicitly selected Azure SKU."""
+        pass
+
+    @abstractmethod
     async def stop_app_service_plan(self, resource_id: str) -> bool:
         """Deallocate / Suspend App Service Plan instances. Returns True if succeeded."""
         pass
@@ -46,5 +56,5 @@ class AzureClientAdapter(ABC):
 
     @abstractmethod
     def get_mode(self) -> str:
-        """Retrieve the adapter's operating mode (MOCK, LIVE, or HYBRID)."""
+        """Retrieve the adapter's operating mode (MOCK or LIVE)."""
         pass

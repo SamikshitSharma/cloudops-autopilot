@@ -134,57 +134,43 @@ async def test_live_client_success_query(monkeypatch):
     assert plans[0].sku_name == "P1v2"
 
 @pytest.mark.asyncio
-async def test_live_client_fallback_on_exception(monkeypatch):
-    """Verify that any exception raised by the SDK client triggers automatic fallback to MockAzureClient."""
+async def test_live_client_surfaces_sdk_failures_without_mock_contamination(monkeypatch):
+    """LIVE mode must fail explicitly instead of returning simulated Azure data."""
     client = LiveAzureClient()
-    
-    # Mock compute_client to throw error on call
+
     mock_compute = MagicMock()
     mock_compute.virtual_machines.list_all.side_effect = Exception("Subscription authentication failed")
     mock_compute.disks.list.side_effect = Exception("Resource group not found")
     client.compute_client = mock_compute
-    
-    # Mock web_client to throw error
+
     mock_web = MagicMock()
     mock_web.app_service_plans.list.side_effect = Exception("Service offline")
     client.web_client = mock_web
 
-    # Mock resource_client to throw error
     mock_resource = MagicMock()
     mock_resource.resources.list.side_effect = Exception("Advisor service unavailable")
     client.resource_client = mock_resource
 
-    
-    # 1. list_virtual_machines should fallback and return mock VMs (3 of them)
-    vms = await client.list_virtual_machines()
-    assert len(vms) == 3
-    names = [v.name for v in vms]
-    assert "vm-dev-idle-01" in names
-    
-    # 2. list_unattached_disks should fallback and return mock disks (2 of them)
-    disks = await client.list_unattached_disks()
-    assert len(disks) == 2
-    
-    # 3. list_app_service_plans should fallback
-    plans = await client.list_app_service_plans()
-    assert len(plans) == 1
-    
-    # 4. telemetry should fallback
-    telemetry = await client.get_resource_telemetry("/subscriptions/.../virtualMachines/vm-dev-idle-01", 12)
-    assert len(telemetry) == 12
+    with pytest.raises(RuntimeError, match="virtual machine discovery"):
+        await client.list_virtual_machines()
 
-    # 5. cost recommendations should fallback
-    recos = await client.get_cost_recommendations()
-    assert len(recos) == 3
+    with pytest.raises(RuntimeError, match="disk discovery"):
+        await client.list_unattached_disks()
 
-    # 6. stop vm should fallback
-    stop_success = await client.stop_virtual_machine("/subscriptions/.../virtualMachines/vm-dev-idle-01")
-    assert stop_success is True
+    with pytest.raises(RuntimeError, match="App Service plan discovery"):
+        await client.list_app_service_plans()
 
-    # 7. stop asp should fallback
-    stop_asp_success = await client.stop_app_service_plan("/subscriptions/.../serverfarms/asp-dev-idle-01")
-    assert stop_asp_success is True
+    with pytest.raises(RuntimeError, match="Advisor recommendation query"):
+        await client.get_cost_recommendations()
 
-    # 8. delete disk should fallback
-    delete_success = await client.delete_unattached_disk("/subscriptions/.../disks/disk-temp-orphan-01")
-    assert delete_success is True
+    with pytest.raises(RuntimeError, match="virtual machine discovery"):
+        await client.stop_virtual_machine("vm-dev-idle-01")
+
+    with pytest.raises(NotImplementedError, match="cannot be stopped directly"):
+        await client.stop_app_service_plan("asp-dev-idle-01")
+
+    with pytest.raises(RuntimeError, match="virtual machine discovery"):
+        await client.delete_unattached_disk("disk-temp-orphan-01")
+
+    assert client.last_error is not None
+    assert "Mock" not in client.last_error
