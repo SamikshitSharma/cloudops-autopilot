@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { SeverityBadge } from "@/components/ui-ext/SeverityBadge";
 import { Sparkles, TrendingUp, ShieldCheck, Zap, Cpu } from "lucide-react";
 import { toast } from "sonner";
-import { useRecommendations, useApproveRecommendation, useDismissRecommendation } from "@/hooks/useRecommendations";
-import { useApprovals } from "@/hooks/useApprovals";
+import { useRecommendations, useApproveRecommendation, useDismissRecommendation, useRecommendationExecutionPlan } from "@/hooks/useRecommendations";
 import { LoadingState, ErrorState, EmptyState } from "@/components/ui-ext/StateViews";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import type { Severity, Recommendation } from "@/lib/types";
@@ -38,6 +37,7 @@ export default function Recommendations() {
 
   const [filter, setFilter] = useState<string>("all");
   const [previewReco, setPreviewReco] = useState<Recommendation | null>(null);
+  const { data: executionPlan, isLoading: isPlanLoading, isError: isPlanError, error: planError } = useRecommendationExecutionPlan(previewReco?.id);
 
   const recommendations = useMemo(() => {
     if (!dbRecommendations) return [];
@@ -75,7 +75,7 @@ export default function Recommendations() {
       { recoId: r.id },
       {
         onSuccess: () => {
-          toast.success("Recommendation successfully approved and execution triggered!");
+          toast.success("Recommendation approval request sent to backend.");
         },
         onError: (err: any) => {
           toast.error(`Approval dispatch failed: ${err.message}`);
@@ -253,33 +253,40 @@ export default function Recommendations() {
                 </div>
               </div>
 
-              {/* CLI Command Preview */}
+              {/* Backend Execution Plan */}
               <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-1">CLI Command Preview</span>
-                <pre className="rounded-md border border-border bg-black/50 p-3 text-[11.5px] font-mono text-primary leading-relaxed whitespace-pre-wrap break-all leading-normal">
-                  {(() => {
-                    const name = previewReco.resource;
-                    if (previewReco.title.toLowerCase().includes("stop")) {
-                      return `# Azure CLI Action Dispatch script\naz vm stop \\\n  --name "${name}" \\\n  --resource-group "rg-autopilot" \\\n  --no-wait`;
-                    }
-                    if (previewReco.title.toLowerCase().includes("resize")) {
-                      return `# Azure CLI Action Dispatch script\naz vm resize \\\n  --name "${name}" \\\n  --size "Standard_B2s" \\\n  --resource-group "rg-autopilot" \\\n  --no-wait`;
-                    }
-                    if (previewReco.title.toLowerCase().includes("purge") || previewReco.title.toLowerCase().includes("delete")) {
-                      return `# Azure CLI Action Dispatch script\naz disk delete \\\n  --name "${name}" \\\n  --resource-group "rg-autopilot" \\\n  --yes --no-wait`;
-                    }
-                    if (previewReco.title.toLowerCase().includes("ssh") || previewReco.title.toLowerCase().includes("port 22")) {
-                      return `# Azure CLI Action Dispatch script\naz network nsg rule update \\\n  --nsg-name "nsg-${name}" \\\n  --resource-group "rg-autopilot" \\\n  --name "AllowSSH" \\\n  --access "Deny" \\\n  --priority 100`;
-                    }
-                    if (previewReco.title.toLowerCase().includes("backup")) {
-                      return `# Azure CLI Action Dispatch script\naz backup protection enable-for-vm \\\n  --resource-group "rg-autopilot" \\\n  --vault-name "backup-vault-eastus" \\\n  --vm "${name}" \\\n  --policy-name "DefaultPolicy"`;
-                    }
-                    if (previewReco.title.toLowerCase().includes("vault") || previewReco.title.toLowerCase().includes("public network")) {
-                      return `# Azure CLI Action Dispatch script\naz keyvault update \\\n  --name "${name}" \\\n  --resource-group "rg-autopilot" \\\n  --default-action "Deny"`;
-                    }
-                    return `# General Action Dispatch script\naz resource update --ids "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-autopilot/providers/Microsoft.Compute/virtualMachines/${name}"`;
-                  })()}
-                </pre>
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Backend Execution Plan</span>
+                <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-3 leading-relaxed">
+                  {isPlanLoading ? (
+                    <p className="text-muted-foreground">Loading backend execution plan...</p>
+                  ) : isPlanError ? (
+                    <p className="text-destructive">Execution plan unavailable: {(planError as Error)?.message}</p>
+                  ) : executionPlan ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
+                        <div><span className="text-muted-foreground">Workflow:</span> {executionPlan.workflow_id}</div>
+                        <div><span className="text-muted-foreground">Mode:</span> {executionPlan.execution_mode}</div>
+                        <div><span className="text-muted-foreground">Correlation:</span> {executionPlan.correlation_id || "Not recorded"}</div>
+                        <div><span className="text-muted-foreground">Approval:</span> {executionPlan.requires_approval ? "Required" : "Not required"}</div>
+                        <div className="col-span-2 break-all"><span className="text-muted-foreground">Provider ID:</span> {executionPlan.target.provider_id || "No provider ID recorded"}</div>
+                      </div>
+                      {executionPlan.blockers.length > 0 && (
+                        <div className="rounded border border-warning/40 bg-warning/10 p-2 text-warning">
+                          <div className="font-semibold uppercase text-[10px] mb-1">Plan blockers</div>
+                          <ul className="list-disc pl-4 space-y-1">
+                            {executionPlan.blockers.map((b) => <li key={b}>{b}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      <ol className="list-decimal pl-4 space-y-1.5 text-foreground/90">
+                        {executionPlan.steps.map((step) => <li key={step}>{step}</li>)}
+                      </ol>
+                      <p className="text-[11px] text-muted-foreground">{executionPlan.truth_note}</p>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">No backend execution plan returned.</p>
+                  )}
+                </div>
               </div>
 
               {/* Reasoning Chain */}

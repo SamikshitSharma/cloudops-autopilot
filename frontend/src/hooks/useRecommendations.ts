@@ -15,6 +15,46 @@ export interface RecommendationDTO {
   reasoning_chain?: any;
 }
 
+export interface ExecutionPlanDTO {
+  recommendation_id: string;
+  run_id: string;
+  workflow_id: string;
+  correlation_id?: string | null;
+  execution_mode: string;
+  status: string;
+  action: string;
+  risk_level: string;
+  requires_approval: boolean;
+  target: {
+    resource_id: string;
+    provider_id?: string | null;
+    name: string;
+    type: string;
+    region: string;
+    status: string;
+  };
+  evidence: string;
+  rationale: string;
+  estimated_monthly_savings: number;
+  steps: string[];
+  blockers: string[];
+  command_preview?: string | null;
+  truth_note: string;
+}
+
+export function useRecommendationExecutionPlan(recoId?: string) {
+  return useQuery<ExecutionPlanDTO>({
+    queryKey: ["recommendationExecutionPlan", recoId],
+    enabled: Boolean(recoId),
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: ExecutionPlanDTO }>(`/api/v1/recommendations/${recoId}/execution-plan`);
+      if (!res?.data) throw new Error("Execution plan response did not include data.");
+      return res.data;
+    },
+    staleTime: 5000,
+  });
+}
+
 export function useRecommendations() {
   return useQuery<RecommendationDTO[]>({
     queryKey: ["recommendations"],

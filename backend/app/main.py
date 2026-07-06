@@ -303,10 +303,10 @@ async def check_health(db: Session = Depends(get_db)):
         cloud_error = str(exc)
         logger.error("Cloud adapter health check failed: %s", exc)
 
-    ai_status = "healthy" if settings.GEMINI_API_KEY else "unavailable"
-    ai_error = None if settings.GEMINI_API_KEY else "GEMINI_API_KEY is not configured; real AI reasoning is unavailable."
+    ai_status = "gemini" if settings.GEMINI_API_KEY else "local-evidence"
+    ai_error = None if settings.GEMINI_API_KEY else "GEMINI_API_KEY is not configured; using local evidence-based assistant fallback."
 
-    service_healthy = db_status == "healthy" and cloud_status == "healthy" and ai_status == "healthy"
+    service_healthy = db_status == "healthy" and cloud_status == "healthy"
     health_info = HealthDTO(
         status="healthy" if service_healthy else "unhealthy",
         database=db_status,
@@ -595,6 +595,14 @@ async def get_recommendation(reco_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"Recommendation '{reco_id}' not found")
     return make_model_response(reco)
 
+@v1_router.get("/recommendations/{reco_id}/execution-plan", response_model=APIResponse, tags=["Recommendations"])
+async def get_recommendation_execution_plan(reco_id: str, db: Session = Depends(get_db)):
+    """Returns the backend-derived execution plan for a recommendation; never fabricates CLI commands."""
+    reco = db.query(DBRecommendation).filter(DBRecommendation.id == reco_id).first()
+    if not reco:
+        raise HTTPException(status_code=404, detail=f"Recommendation '{reco_id}' not found")
+    return make_response(True, "Execution plan generated from backend state", _build_execution_plan(db, reco))
+
 def make_model_response(reco):
     return make_response(True, "Recommendation retrieved successfully", RecommendationDTO.model_validate(reco).model_dump())
 
@@ -654,9 +662,9 @@ async def approve_recommendation(approval_id: str, payload: ApproveRequest, back
     audit_log = DBAuditLog(
         run_id=reco.run_id,
         agent_name="ApprovalAgent",
-        step_name="Approval Approval",
+        step_name="ApprovalGranted",
         event_type="ApprovalGranted",
-        payload={"approval_id": approval_id, "operator_id": payload.operator_id},
+        payload=_audit_payload(db, reco.run_id, payload.operator_id, "ApprovalGranted", "success", approval_id=approval_id, recommendation_id=reco.id, resource_id=reco.resource_id),
         status="success"
     )
     db.add(audit_log)
@@ -722,9 +730,9 @@ async def reject_recommendation(approval_id: str, payload: ApproveRequest, backg
     audit_log = DBAuditLog(
         run_id=reco.run_id,
         agent_name="ApprovalAgent",
-        step_name="Approval Rejection",
+        step_name="ApprovalRejected",
         event_type="ApprovalRejected",
-        payload={"approval_id": approval_id, "operator_id": payload.operator_id},
+        payload=_audit_payload(db, reco.run_id, payload.operator_id, "ApprovalRejected", "warning", approval_id=approval_id, recommendation_id=reco.id, resource_id=reco.resource_id),
         status="warning"
     )
     db.add(audit_log)
@@ -761,76 +769,51 @@ async def approve_recommendation_endpoint(reco_id: str, background_tasks: Backgr
     if reco.status == "approved" or reco.status == "remediated":
         return make_response(True, "Recommendation is already approved", RecommendationDTO.model_validate(reco).model_dump())
         
-    approval_required = reco.risk_level == "high"
+    approval_required = reco.risk_level == "high" or reco.action_type.lower() in {"delete", "resize"}
     
-    # Write Audit log
-    audit_log = DBAuditLog(
-        run_id=reco.run_id,
-        agent_name="Dashboard-Operator",
-        step_name="Recommendation Approval",
-        event_type="RecommendationApproved",
-        payload={"recommendation_id": reco_id, "resource_id": reco.resource_id},
-        status="success"
-    )
-    db.add(audit_log)
-    db.commit()
-
     if approval_required:
-        app_id = "wf-app-wf-run-" + reco.run_id
+        app_id = f"wf-app-{reco.id}"
         db_app = db.query(DBApproval).filter(DBApproval.recommendation_id == reco_id).first()
         if not db_app:
             db_app = DBApproval(
                 id=app_id,
                 recommendation_id=reco_id,
-                token=f"app-token-{uuid.uuid4()}",
+                token=None,
                 status="pending",
                 created_at=datetime.utcnow()
             )
             db.add(db_app)
-            db.commit()
-            
-        from mcp_server.server import encode_token_jwt
-        token_payload = {
-            "sub": reco.resource_id,
-            "action": reco.action_type,
-            "workflow_id": f"wf-run-{reco.run_id}",
-            "exp": datetime.utcnow() + timedelta(minutes=10),
-            "iss": settings.APPROVAL_TOKEN_ISSUER
-        }
-        token = encode_token_jwt(token_payload, settings.JWT_SECRET_KEY, settings.JWT_ALGORITHM)
-        
-        db_app.status = "approved"
-        db_app.token = token
-        db_app.decided_at = datetime.utcnow()
-        db_app.operator_id = "reco-page-operator"
-        
+        elif db_app.status in {"rejected", "approved"}:
+            raise HTTPException(status_code=409, detail=f"Approval request is already {db_app.status}")
+        reco.status = "escalated"
+        audit_status = "warning"
+        audit_operation = "RecommendationAwaitingApproval"
+        response_message = "Recommendation moved to approval queue"
+    else:
         reco.status = "approved"
-        
-        # SYNC: Update Run record status
+        audit_status = "success"
+        audit_operation = "RecommendationApproved"
+        response_message = "Recommendation approved successfully"
         db_run = db.query(DBRun).filter(DBRun.id == reco.run_id).first()
         if db_run:
             db_run.status = "running"
-        db.commit()
-        
-        from backend.app.models.workflow import SequentialWorkflow
-        wf_run_id = f"wf-run-{reco.run_id}"
-        db_wf = db.query(SequentialWorkflow).filter(SequentialWorkflow.id == wf_run_id).first()
-        if db_wf and db_wf.status == "blocked_on_approval":
-            try:
-                db_wf.status = "running"
-                db.commit()
-                background_tasks.add_task(resume_workflow_bg, db_wf.id, token)
-            except Exception as seq_res_err:
-                logger.error(f"Failed to resume sequential workflow run '{wf_run_id}': {seq_res_err}")
-    else:
-        reco.status = "approved"
-        db.commit()
+
+    audit_log = DBAuditLog(
+        run_id=reco.run_id,
+        agent_name="Dashboard-Operator",
+        step_name=audit_operation,
+        event_type=audit_operation,
+        payload=_audit_payload(db, reco.run_id, "Dashboard-Operator", audit_operation, audit_status, recommendation_id=reco_id, resource_id=reco.resource_id, approval_required=approval_required),
+        status=audit_status
+    )
+    db.add(audit_log)
+    db.commit()
         
     from backend.app.services.event_bus import event_bus
     from backend.app.models.workflow import EventType
-    event_bus.publish(EventType.WORKFLOW_STEP_COMPLETED, reco.run_id, {"recommendation_id": reco_id, "action": "approved", "agent": "Dashboard-Operator"})
+    event_bus.publish(EventType.WORKFLOW_STEP_COMPLETED, reco.run_id, {"recommendation_id": reco_id, "action": audit_operation, "agent": "Dashboard-Operator"})
         
-    return make_response(True, "Recommendation approved successfully", RecommendationDTO.model_validate(reco).model_dump())
+    return make_response(True, response_message, RecommendationDTO.model_validate(reco).model_dump())
 
 @v1_router.post("/recommendations/{reco_id}/dismiss", response_model=APIResponse, tags=["Recommendations"])
 async def dismiss_recommendation_endpoint(reco_id: str, db: Session = Depends(get_db)):
@@ -845,9 +828,9 @@ async def dismiss_recommendation_endpoint(reco_id: str, db: Session = Depends(ge
     audit_log = DBAuditLog(
         run_id=reco.run_id,
         agent_name="Dashboard-Operator",
-        step_name="Recommendation Dismissal",
+        step_name="RecommendationDismissed",
         event_type="RecommendationDismissed",
-        payload={"recommendation_id": reco_id, "resource_id": reco.resource_id},
+        payload=_audit_payload(db, reco.run_id, "Dashboard-Operator", "RecommendationDismissed", "warning", recommendation_id=reco_id, resource_id=reco.resource_id),
         status="warning"
     )
     db.add(audit_log)
@@ -1025,6 +1008,90 @@ async def get_topology(db: Session = Depends(get_db)):
         "agent": {"nodes": agent_nodes, "edges": agent_edges},
         "relationship_note": "Infrastructure edges represent Azure provider-ID containment only; no dependencies are inferred.",
     })
+
+def _workflow_for_run(db: Session, run_id: str):
+    from backend.app.models.workflow import SequentialWorkflow
+    return db.query(SequentialWorkflow).filter(SequentialWorkflow.run_id == run_id).first()
+
+
+def _audit_payload(db: Session, run_id: str, actor: str, operation: str, status: str, **details) -> Dict[str, Any]:
+    wf = _workflow_for_run(db, run_id)
+    return {
+        "workflow_id": wf.id if wf else f"wf-run-{run_id}",
+        "run_id": run_id,
+        "correlation_id": wf.correlation_id if wf else None,
+        "actor": actor,
+        "operation": operation,
+        "status": status,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        **details,
+    }
+
+
+def _build_execution_plan(db: Session, reco: DBRecommendation) -> Dict[str, Any]:
+    resource = db.query(DBResource).filter(DBResource.id == reco.resource_id).first()
+    wf = _workflow_for_run(db, reco.run_id)
+    provider_id = resource.provider_id if resource else None
+    action = reco.action_type.lower()
+    mode = wf.execution_mode if wf else settings.CLOUD_MODE.upper()
+    target = {
+        "resource_id": reco.resource_id,
+        "provider_id": provider_id,
+        "name": resource.name if resource else reco.resource_id,
+        "type": resource.type if resource else "unknown",
+        "region": resource.region if resource else "unknown",
+        "status": resource.status if resource else "unknown",
+    }
+    steps = []
+    blockers = []
+    if mode == "LIVE" and not provider_id:
+        blockers.append("LIVE execution requires an Azure provider_id; none is recorded for this resource.")
+
+    if action == "stop":
+        steps = [
+            "Validate target resource identity against synchronized Azure provider ID.",
+            "Acquire approval token when policy requires human authorization.",
+            "Call Azure Compute deallocate for the VM through the live cloud adapter.",
+            "Refresh resource inventory, workflow events, audit ledger, recommendations, and topology.",
+        ]
+    elif action == "resize":
+        steps = [
+            "Validate target VM identity and requested target SKU from policy context.",
+            "Acquire approval token for capacity-changing operation.",
+            "Call Azure Compute resize through the live cloud adapter.",
+            "Refresh telemetry, workflow state, audit ledger, recommendations, and topology.",
+        ]
+    elif action == "delete":
+        steps = [
+            "Validate the resource is unattached or otherwise safe according to recorded evidence.",
+            "Acquire approval token for destructive operation.",
+            "Execute deletion through the cloud adapter only after approval validation.",
+            "Refresh resource inventory, audit ledger, recommendations, and topology.",
+        ]
+    else:
+        blockers.append(f"Action '{reco.action_type}' is not implemented by the execution adapter.")
+        steps = ["No executable plan is available for this action type."]
+
+    return {
+        "recommendation_id": reco.id,
+        "run_id": reco.run_id,
+        "workflow_id": wf.id if wf else f"wf-run-{reco.run_id}",
+        "correlation_id": wf.correlation_id if wf else None,
+        "execution_mode": mode,
+        "status": reco.status,
+        "action": reco.action_type,
+        "risk_level": reco.risk_level,
+        "requires_approval": reco.risk_level == "high" or action in {"delete", "resize"},
+        "target": target,
+        "evidence": reco.evidence or "No evidence field was recorded for this recommendation.",
+        "rationale": reco.rationale,
+        "estimated_monthly_savings": reco.saving_amount,
+        "steps": steps,
+        "blockers": blockers,
+        "command_preview": None,
+        "truth_note": "This plan is generated from backend workflow, recommendation, and Azure inventory state. The UI must not fabricate CLI commands.",
+    }
+
 
 def fallback_rule_based_ai(query: str, resources, recommendations, workflows, audit_logs, selected_resource_id: Optional[str] = None, context_url: Optional[str] = None) -> str:
     q = query.lower()
@@ -1242,12 +1309,17 @@ Answer the user's question clearly and concisely based on the current state.
                 detail=f"AI generation failed: {str(gen_err)}"
             ) from gen_err
     else:
-        raise HTTPException(
-            status_code=503,
-            detail="GEMINI_API_KEY is not configured in the backend environment. Real AI reasoning is required by the Release Contract."
+        ai_response = fallback_rule_based_ai(
+            payload.query,
+            resources,
+            recommendations,
+            workflows,
+            audit_logs,
+            payload.selected_resource_id,
+            payload.context_url,
         )
         
-    return make_response(True, "AI query completed", {"response": ai_response})
+    return make_response(True, "AI query completed", {"response": ai_response, "source": "gemini" if api_key else "local-evidence"})
 
 @v1_router.get("/reasoning-paths", response_model=APIResponse, tags=["Reasoning Paths"])
 async def list_reasoning_paths(db: Session = Depends(get_db)):
