@@ -83,10 +83,12 @@ uv pip install -e .
 ```
 
 ### Running the API Server
-Start the Uvicorn web server locally. Ensure you set the `JWT_SECRET_KEY` environment variable:
+Copy `.env.example` to `.env` and provide real values for the selected mode. For a release-ready LIVE run, `AZURE_SUBSCRIPTION_ID`, `JWT_SECRET_KEY`, and `GEMINI_API_KEY` must be configured. Without `GEMINI_API_KEY`, `/health` reports `ai_status=unavailable` and `/ask-ai` returns HTTP 503 instead of a simulated answer.
+
 ```bash
 # Windows PowerShell
 $env:JWT_SECRET_KEY="your_jwt_secret_key_here"
+$env:GEMINI_API_KEY="your_gemini_key_here"
 uv run uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 Visit the interactive Swagger UI documentation at: `http://127.0.0.1:8000/docs`.
@@ -110,8 +112,11 @@ Open your browser and navigate to `http://localhost:5173` (or the port specified
 
 ## 6. Configuring Cloud Execution Modes
 The system can operate in two different cloud modes managed in the `.env` configuration file:
-*   **`CLOUD_MODE=LIVE`**: Integrates directly with the Azure Resource Manager SDK using `DefaultAzureCredential`. Auto-discovers running resources and queries Azure Monitor timeseries telemetry.
+*   **`CLOUD_MODE=LIVE`**: Integrates directly with the Azure Resource Manager SDK using `DefaultAzureCredential`. Auto-discovers running resources and queries Azure Monitor timeseries telemetry. LIVE mode does not fall back to mock data; Azure or AI configuration failures are surfaced as unhealthy/error states.
 *   **`CLOUD_MODE=MOCK`**: Emulates Azure operations in memory using a simulated client structure. Ideal for offline validation, unit testing, and sandbox environments without subscription access.
 
-If the live Azure client encounters connection or authentication errors during `LIVE` execution, it will automatically fall back to the `MOCK` client state to ensure uninterrupted operation.
+Release readiness also requires real AI configuration:
+*   **`GEMINI_API_KEY`**: Required for `/ask-ai` and for `/health` to report `ai_status=healthy`.
+*   **`GEMINI_MODEL`**: Optional model override; defaults to `gemini-2.5-flash`.
+
 
