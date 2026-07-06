@@ -13,6 +13,14 @@ export interface ResourceDTO {
   provider: string;
   utilization: number | null;
   monthly_cost: number | null;
+  cpu_utilization?: number | null;
+  memory_utilization?: number | null;
+  disk_utilization?: number | null;
+  network_utilization?: number | null;
+  telemetry_explanation?: string | null;
+  metric_source?: string | null;
+  cost_explanation?: string | null;
+  health?: string;
 }
 
 

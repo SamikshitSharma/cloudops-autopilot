@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { useResources } from "@/hooks/useResources";
-import type { Resource, Status } from "@/lib/types";
+import { toast } from "sonner";
+import type { Status } from "@/lib/types";
 
 const mapStatus = (status: string): Status => {
   const s = status.toLowerCase();
@@ -43,6 +44,8 @@ export default function Resources() {
       disk_utilization: r.disk_utilization ?? null,
       network_utilization: r.network_utilization ?? null,
       telemetry_explanation: r.telemetry_explanation ?? null,
+      metric_source: r.metric_source ?? null,
+      cost_explanation: r.cost_explanation ?? null,
     }));
   }, [dbResources]);
 
@@ -129,29 +132,40 @@ export default function Resources() {
                   <TableCell>
                     {r.cpu_utilization !== null ? (
                       <div className="space-y-1.5 py-1 max-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                        {r.metric_source && <div className="text-[10px] text-muted-foreground">Source: {r.metric_source}</div>}
                         <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground leading-none">
                           <span>CPU</span>
                           <span className="font-semibold">{r.cpu_utilization}%</span>
                         </div>
                         <Progress value={r.cpu_utilization} className="h-1" />
                         
-                        <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground leading-none">
-                          <span>MEM</span>
-                          <span className="font-semibold">{r.memory_utilization}%</span>
-                        </div>
-                        <Progress value={r.memory_utilization} className="h-1 bg-muted/20" />
-                        
-                        <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground leading-none">
-                          <span>DISK</span>
-                          <span className="font-semibold">{r.disk_utilization}%</span>
-                        </div>
-                        <Progress value={r.disk_utilization} className="h-1 bg-muted/20" />
-                        
-                        <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground leading-none">
-                          <span>NET</span>
-                          <span className="font-semibold">{r.network_utilization}%</span>
-                        </div>
-                        <Progress value={r.network_utilization} className="h-1 bg-muted/20" />
+                        {r.memory_utilization !== null && (
+                          <>
+                            <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground leading-none">
+                              <span>MEM</span>
+                              <span className="font-semibold">{r.memory_utilization}%</span>
+                            </div>
+                            <Progress value={r.memory_utilization} className="h-1 bg-muted/20" />
+                          </>
+                        )}
+                        {r.disk_utilization !== null && (
+                          <>
+                            <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground leading-none">
+                              <span>DISK</span>
+                              <span className="font-semibold">{r.disk_utilization}%</span>
+                            </div>
+                            <Progress value={r.disk_utilization} className="h-1 bg-muted/20" />
+                          </>
+                        )}
+                        {r.network_utilization !== null && (
+                          <>
+                            <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground leading-none">
+                              <span>NET</span>
+                              <span className="font-semibold">{r.network_utilization}%</span>
+                            </div>
+                            <Progress value={r.network_utilization} className="h-1 bg-muted/20" />
+                          </>
+                        )}
                       </div>
                     ) : (
                       <span className="text-[11px] text-muted-foreground/80 italic leading-relaxed block max-w-[180px]">
@@ -160,7 +174,13 @@ export default function Resources() {
                     )}
                   </TableCell>
                   <TableCell className="text-right font-mono">
-                    {r.cost !== null && r.cost !== undefined ? `$${r.cost.toLocaleString()}` : "—"}
+                    {r.cost !== null && r.cost !== undefined ? (
+                      `$${r.cost.toLocaleString()}`
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground whitespace-normal block max-w-[180px] ml-auto">
+                        {r.cost_explanation || "Cost unavailable"}
+                      </span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

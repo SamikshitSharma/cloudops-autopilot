@@ -238,14 +238,13 @@ export default function Overview() {
         <div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-2xl">
             <Badge variant="outline" className="mb-4 gap-1.5 border-primary/40 text-primary">
-              <Sparkles className="h-3 w-3" /> Autopilot is actively optimizing {metrics?.total_discovered_resources ?? 0} resources
+              <Sparkles className="h-3 w-3" /> Autopilot is observing {metrics?.total_discovered_resources ?? 0} synchronized resources
             </Badge>
             <h2 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">
-              Your <span className="text-gradient">autonomous cloud</span>, at a glance.
+              Your <span className="text-gradient">governed cloud</span>, at a glance.
             </h2>
             <p className="mt-3 max-w-xl text-sm text-muted-foreground md:text-base">
-              A 9-stage AI agent pipeline continuously observes, reasons, and safely remediates across Azure —
-              with human-in-the-loop guardrails on every high-impact change.
+              A 9-stage AI agent pipeline observes synchronized Azure state, reasons over recorded evidence, and routes high-impact changes through human approval.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

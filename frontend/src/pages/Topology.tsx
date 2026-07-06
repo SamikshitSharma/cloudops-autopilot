@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { LoadingState, ErrorState } from "@/components/ui-ext/StateViews";
 import { Network, GitBranch, Cpu, Database, HardDrive, ShieldCheck, HelpCircle, Cloud, Globe, Server, Lock, BotMessageSquare } from "lucide-react";
 import { toast } from "sonner";
+import { useHealth } from "@/hooks/overview";
 
 export interface TopologyNode {
   id: string;
@@ -50,6 +51,7 @@ export interface TopologyResponse {
 export default function Topology() {
   const [view, setView] = useState<"infrastructure" | "agent">("infrastructure");
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null);
+  const { data: health } = useHealth();
 
   const { data: topology, isLoading, isError, error, refetch } = useQuery<TopologyResponse>({
     queryKey: ["topology"],
@@ -74,10 +76,7 @@ export default function Topology() {
     refetchInterval: 3000,
   });
 
-  const activeMode = useMemo(() => {
-    // Dynamically query health cloud mode
-    return "MOCK";
-  }, []);
+  const activeMode = useMemo(() => health?.data?.cloud_mode ?? "UNKNOWN", [health]);
 
   const handleNodeClick = (node: TopologyNode) => {
     setSelectedNode(node);
@@ -190,9 +189,12 @@ export default function Topology() {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="font-display text-2xl font-semibold">System & Agent Topology</h2>
-          <p className="text-sm text-muted-foreground">Trace dependencies, blast radius, and active multi-agent pipeline sequences</p>
+          <p className="text-sm text-muted-foreground">Trace synchronized Azure containment and recorded multi-agent pipeline state</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <Badge variant="outline" className="uppercase font-semibold tracking-wider text-xs border-primary/45 text-primary">
+            {activeMode}
+          </Badge>
           <Button 
             variant={view === "infrastructure" ? "default" : "outline"} 
             size="sm" 

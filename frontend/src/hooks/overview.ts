@@ -7,6 +7,9 @@ export interface HealthResponse {
   data: {
     status: string;
     database: string;
+    cloud_mode: "LIVE" | "MOCK" | string;
+    cloud_status: string;
+    cloud_error?: string | null;
   };
 }
 
