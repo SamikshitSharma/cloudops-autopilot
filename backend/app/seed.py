@@ -4,22 +4,13 @@ from sqlalchemy.orm import Session
 from backend.app.models.run import Run, AuditLog
 from backend.app.models.resource import Resource, TelemetryHistory
 from backend.app.models.recommendation import Recommendation, Approval
+from backend.app.models.reasoning_path import AgentReasoningPath
 
 def seed_db(db: Session):
     from shared.config import settings
+    from backend.app.models.workflow import SequentialWorkflow, WorkflowStage, WorkflowEventLog
     if settings.CLOUD_MODE.upper() == "LIVE":
-        print("Clearing mock/seeded database entries for live Azure mode...")
-        try:
-            db.query(TelemetryHistory).delete()
-            db.query(Recommendation).delete()
-            db.query(Approval).delete()
-            db.query(AuditLog).delete()
-            db.query(Run).delete()
-            db.query(Resource).delete()
-            db.commit()
-        except Exception as delete_err:
-            print(f"Error clearing database: {delete_err}")
-            db.rollback()
+        print("Synchronizing live Azure resources for inventory...")
 
         print("Discovering live Azure resources for inventory...")
         from cloud_adapter.live_client import LiveAzureClient
@@ -268,6 +259,26 @@ def seed_db(db: Session):
             status="Running",
             tags={"env": "dev"},
             last_seen=datetime.utcnow() - timedelta(hours=4)
+        ),
+        Resource(
+            id="kv-prod-keys",
+            provider_id="/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod/providers/Microsoft.KeyVault/vaults/kv-prod-keys",
+            name="kv-prod-keys",
+            type="Microsoft.KeyVault/vaults",
+            region="eastus",
+            status="Available",
+            tags={"env": "prod", "owner": "secops"},
+            last_seen=datetime.utcnow() - timedelta(hours=2)
+        ),
+        Resource(
+            id="db-prod-sql",
+            provider_id="/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod/providers/Microsoft.Sql/servers/db-prod-sql",
+            name="db-prod-sql",
+            type="Microsoft.Sql/servers",
+            region="eastus",
+            status="Online",
+            tags={"env": "prod", "project": "analytics"},
+            last_seen=datetime.utcnow() - timedelta(hours=2)
         )
     ]
     
@@ -823,6 +834,201 @@ def seed_db(db: Session):
     ]
     for log in audit_logs:
         db.add(log)
+    db.commit()
+
+    # 7. Create Agent Reasoning Paths
+    reasoning_paths = [
+        AgentReasoningPath(
+            id="path-cosmos-01",
+            timestamp=datetime.utcnow() - timedelta(hours=5),
+            resource_id="cosmos-idle-01",
+            agent_name="FinOpsAgent",
+            trigger_event="Scheduled Cost Optimization Scan",
+            observations={
+                "resource_id": "cosmos-idle-01",
+                "resource_type": "Microsoft.DocumentDB/databaseAccounts",
+                "current_provisioned_throughput_ru": 4000,
+                "active_requests_past_30_days": 87,
+                "monthly_cost_usd": 240.00,
+                "utilization_percentage": 0.05
+            },
+            hypotheses=[
+                {
+                    "hypothesis": "The database was provisioned for high-throughput batch migration but was never scaled down or deleted post-completion.",
+                    "confidence_score": 0.98
+                },
+                {
+                    "hypothesis": "Dev environment database left at production tier.",
+                    "confidence_score": 0.85
+                }
+            ],
+            policy_check_status="Compliant",
+            recommended_action="Scale throughput down to 400 RU/s (manual) to save $216.00/month."
+        ),
+        AgentReasoningPath(
+            id="path-vm-02",
+            timestamp=datetime.utcnow() - timedelta(hours=6),
+            resource_id="vm-unpatched-02",
+            agent_name="SecurityAgent",
+            trigger_event="Weekly Security Assessment",
+            observations={
+                "resource_id": "vm-unpatched-02",
+                "resource_type": "Microsoft.Compute/virtualMachines",
+                "operating_system": "Ubuntu 20.04.2 LTS",
+                "days_since_last_update": 184,
+                "open_ports": [22, 80, 443],
+                "unpatched_cves": ["CVE-2023-4911", "CVE-2023-38545"],
+                "network_security_group_rules": [{"port": 22, "source": "0.0.0.0/0", "action": "Allow"}]
+            },
+            hypotheses=[
+                {
+                    "hypothesis": "Staging VM is excluded from automated patch management, and human error left SSH open globally after troubleshooting.",
+                    "confidence_score": 0.95
+                }
+            ],
+            policy_check_status="Failed",
+            recommended_action="Restrict NSG port 22 access to internal subnet and run patch management update."
+        ),
+        AgentReasoningPath(
+            id="path-app-03",
+            timestamp=datetime.utcnow() - timedelta(hours=7),
+            resource_id="app-service-spike-03",
+            agent_name="FinOpsAgent",
+            trigger_event="Cost Anomaly Alert",
+            observations={
+                "resource_id": "app-service-spike-03",
+                "resource_type": "Microsoft.Web/serverfarms",
+                "cost_trend_daily": [15.2, 16.0, 15.8, 64.0, 68.5],
+                "instances_count": 10,
+                "average_cpu_percent": 8.4,
+                "average_memory_percent": 88.5,
+                "http_error_rate_5xx": 14.2
+            },
+            hypotheses=[
+                {
+                    "hypothesis": "A memory leak in the recently deployed app version is driving container memory usage high, triggering scale-out rules on memory metrics.",
+                    "confidence_score": 0.92
+                }
+            ],
+            policy_check_status="Warning",
+            recommended_action="Rollback App Service deployment to tag v1.2.4 to resolve memory leak, autoscaling count back to 2."
+        ),
+        AgentReasoningPath(
+            id="path-disk-04",
+            timestamp=datetime.utcnow() - timedelta(hours=8),
+            resource_id="disk-orphan-04",
+            agent_name="AnalysisAgent",
+            trigger_event="Daily Orphan Resource Cleanup",
+            observations={
+                "resource_id": "disk-orphan-04",
+                "resource_type": "Microsoft.Compute/disks",
+                "disk_state": "Unattached",
+                "size_gb": 1024,
+                "storage_type": "Premium_LRS",
+                "days_since_last_attachment": 94,
+                "io_activity_past_30_days": {"read_iops": 0, "write_iops": 0}
+            },
+            hypotheses=[
+                {
+                    "hypothesis": "The host Virtual Machine was deleted, but the OS/Data disk was kept, resulting in unattached storage charges.",
+                    "confidence_score": 1.00
+                }
+            ],
+            policy_check_status="Compliant",
+            recommended_action="Take final snapshot of the disk for safety, then delete orphaned disk to save $130.00/month."
+        ),
+        AgentReasoningPath(
+            id="path-sql-05",
+            timestamp=datetime.utcnow() - timedelta(hours=9),
+            resource_id="sql-idle-db-05",
+            agent_name="AnalysisAgent",
+            trigger_event="Database Optimization Scan",
+            observations={
+                "resource_id": "sql-idle-db-05",
+                "resource_type": "Microsoft.Sql/servers/databases",
+                "pricing_tier": "General Purpose - Gen5 - 8 vCores",
+                "active_sessions_count": 0,
+                "cpu_utilization_avg": 0.15,
+                "allocated_storage_gb": 250,
+                "used_storage_gb": 12.4
+            },
+            hypotheses=[
+                {
+                    "hypothesis": "Database is associated with a decommissioned legacy staging service or was provisioned for test suites that are currently idle.",
+                    "confidence_score": 0.96
+                }
+            ],
+            policy_check_status="Requires Approval",
+            recommended_action="Scale database down to 2 vCores or migrate to Serverless tier, saving $580.00/month."
+        ),
+        AgentReasoningPath(
+            id="path-lb-06",
+            timestamp=datetime.utcnow() - timedelta(hours=10),
+            resource_id="lb-no-backends-06",
+            agent_name="AnalysisAgent",
+            trigger_event="Orphan Resource Sweep",
+            observations={
+                "resource_id": "lb-no-backends-06",
+                "resource_type": "Microsoft.Network/loadBalancers",
+                "backend_pool_members": 0,
+                "public_ip_address": "20.185.92.10",
+                "idle_charge_usd_per_day": 0.60
+            },
+            hypotheses=[
+                {
+                    "hypothesis": "All associated VMs in backend pool were terminated or migrated to another network, leaving load balancer idle.",
+                    "confidence_score": 0.99
+                }
+            ],
+            policy_check_status="Compliant",
+            recommended_action="Decommission load balancer and release public IP resource."
+        ),
+        AgentReasoningPath(
+            id="path-kv-07",
+            timestamp=datetime.utcnow() - timedelta(hours=11),
+            resource_id="kv-public-access-07",
+            agent_name="PolicyAgent",
+            trigger_event="Compliance Check",
+            observations={
+                "resource_id": "kv-public-access-07",
+                "resource_type": "Microsoft.KeyVault/vaults",
+                "public_network_access": "Enabled",
+                "allowed_ip_ranges": [],
+                "secret_count": 12
+            },
+            hypotheses=[
+                {
+                    "hypothesis": "Temporary external API integration required public access, firewall configurations were bypass-enabled but not cleaned up.",
+                    "confidence_score": 0.95
+                }
+            ],
+            policy_check_status="Failed",
+            recommended_action="Disable public access, switch key vault to use private endpoint connections."
+        ),
+        AgentReasoningPath(
+            id="path-sa-08",
+            timestamp=datetime.utcnow() - timedelta(hours=12),
+            resource_id="sa-insecure-08",
+            agent_name="PolicyAgent",
+            trigger_event="Compliance Check",
+            observations={
+                "resource_id": "sa-insecure-08",
+                "resource_type": "Microsoft.Storage/storageAccounts",
+                "secure_transfer_required": False,
+                "minimum_tls_version": "TLS1.0"
+            },
+            hypotheses=[
+                {
+                    "hypothesis": "Legacy storage account was created under old Azure subscription defaults and never updated to enforce HTTPS and TLS 1.2.",
+                    "confidence_score": 1.00
+                }
+            ],
+            policy_check_status="Failed",
+            recommended_action="Enable 'Secure transfer required' and upgrade minimum TLS version to TLS 1.2."
+        )
+    ]
+    for path in reasoning_paths:
+        db.add(path)
     db.commit()
 
     print("Mock database seeding completed.")

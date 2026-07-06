@@ -569,17 +569,17 @@ class WorkflowCoordinator:
         db_recos = db.query(DBRecommendation).filter(DBRecommendation.run_id == run_id).all()
         
         # Get confidence scores from history
-        analysis_conf = 0.95
-        policy_conf = 0.98
-        decision_conf = 0.95
+        analysis_conf = None
+        policy_conf = None
+        decision_conf = None
         for trace in getattr(context, "reasoning_history", []):
             agent = trace.get("agent_id")
             if agent == "analysis_agent":
-                analysis_conf = trace.get("confidence_score", 0.95)
+                analysis_conf = trace.get("confidence_score", None)
             elif agent == "policy_agent":
-                policy_conf = trace.get("confidence_score", 0.98)
+                policy_conf = trace.get("confidence_score", None)
             elif agent == "decision_agent":
-                decision_conf = trace.get("confidence_score", 0.95)
+                decision_conf = trace.get("confidence_score", None)
                 
         for db_reco in db_recos:
             r_id = db_reco.resource_id
@@ -592,7 +592,7 @@ class WorkflowCoordinator:
                     break
             analysis_data = {
                 "decision": analysis_decision,
-                "confidence": round(analysis_conf, 2)
+                "confidence": round(analysis_conf, 2) if analysis_conf is not None else None
             }
             
             # 2. FinOps
@@ -658,6 +658,42 @@ class WorkflowCoordinator:
             db_reco.saving_amount = float(cost_saving)
             db_reco.action_type = final_action
             db_reco.risk_level = "high" if (requires_approval or not compliant) else "low"
+            
+            # Log structured AgentReasoningPath record
+            from backend.app.models.reasoning_path import AgentReasoningPath
+            
+            obs = {
+                "resource_id": r_id,
+                "analysis_finding": analysis_data.get("decision"),
+                "analysis_confidence": analysis_data.get("confidence"),
+                "estimated_monthly_savings": finops_data.get("estimated_monthly_savings"),
+                "compliance_gate": policy_data
+            }
+            
+            hyps = [
+                {
+                    "hypothesis": f"Resource {r_id} is idle or overprovisioned due to low compute workload requirements.",
+                    "confidence": analysis_data.get("confidence", None),
+                    "evidence": analysis_data.get("decision")
+                }
+            ]
+            
+            pol_status = "Compliant"
+            if requires_approval:
+                pol_status = "Requires Approval"
+            elif not compliant:
+                pol_status = "Non-Compliant"
+                
+            reasoning_path_entry = AgentReasoningPath(
+                resource_id=r_id,
+                agent_name="Executive Orchestrator Agent",
+                trigger_event=f"Autopilot objective sweep: {objective}",
+                observations=obs,
+                hypotheses=hyps,
+                policy_check_status=pol_status,
+                recommended_action=final_action
+            )
+            db.add(reasoning_path_entry)
             
         db.commit()
 

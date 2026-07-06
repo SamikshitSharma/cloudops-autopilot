@@ -1,183 +1,209 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { api } from "../api/client";
-import type { RunDetailsDTO, RunDTO, RecommendationDTO, ApprovalDTO, ResourceDTO } from "../api/client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/api/client";
 
-export function useWorkflow() {
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [runDetails, setRunDetails] = useState<RunDetailsDTO | null>(null);
-  const [runs, setRuns] = useState<RunDTO[]>([]);
-  const [runsDetails, setRunsDetails] = useState<RunDetailsDTO[]>([]);
-  const [resources, setResources] = useState<ResourceDTO[]>([]);
-  const [recommendations, setRecommendations] = useState<RecommendationDTO[]>([]);
-  const [approvals, setApprovals] = useState<ApprovalDTO[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export interface WorkflowCard {
+  workflow_id: string;
+  run_id: string;
+  correlation_id: string;
+  status: string;
+  objective: string | null;
+  scenario_name: string | null;
+  execution_mode: string;
+  created_at: string;
+  updated_at: string;
+  progress_percentage: number;
+  duration_seconds: number | null;
+  confidence: number;
+  estimated_savings: number;
+}
 
-  // References to keep polling callbacks fresh
-  const pollingRef = useRef<any>(null);
+export interface WorkflowStage {
+  id: string;
+  stage_id: string;
+  stage_name: string;
+  status: "pending" | "running" | "success" | "failed" | "skipped";
+  started_at: string | null;
+  completed_at: string | null;
+  duration: number | null;
+  input_summary: any;
+  output_summary: any;
+  reasoning_summary: any;
+  confidence: number;
+  errors: any;
+  llm_trace: any;
+}
 
-  const fetchGlobalState = useCallback(async () => {
-    try {
-      const [runsRes, resRes, recRes, appRes] = await Promise.all([
-        api.getRuns(),
-        api.getResources(),
-        api.getRecommendations(),
-        api.getApprovals(),
-      ]);
-      setRuns(runsRes.data);
-      setResources(resRes.data);
-      setRecommendations(recRes.data);
-      setApprovals(appRes.data);
+export interface WorkflowDetails {
+  workflow_id: string;
+  run_id: string;
+  status: string;
+  objective: string | null;
+  scenario_name: string | null;
+  execution_mode: string;
+  correlation_id: string;
+  created_at: string;
+  updated_at: string;
+  context: any;
+  metrics: any;
+  visualization_model: any;
+  reasoning_chain: any;
+  stages: WorkflowStage[];
+}
 
-      // Fetch details for all runs in parallel
-      const runsList = runsRes.data;
-      const detailsList = await Promise.all(
-        runsList.map(async (run) => {
-          try {
-            const details = await api.getRunDetails(run.id);
-            return details.data;
-          } catch (err) {
-            return {
-              db_record: run,
-              in_memory_state: null,
-              audit_logs: []
-            };
-          }
-        })
-      );
-      setRunsDetails(detailsList);
-    } catch (err: any) {
-      console.error("Failed to load global workspace state:", err);
-      setError("Failed to sync workspace database metrics.");
-    }
-  }, []);
+export interface LiveWorkflowState {
+  workflow_id: string;
+  status: string;
+  current_stage: string | null;
+  completed_stages: string[];
+  remaining_stages: string[];
+  progress_percentage: number;
+  estimated_time_remaining_seconds: number | null;
+  active_agent: string | null;
+  current_reasoning_summary: string | null;
+  correlation_id: string;
+  execution_mode: string;
+}
 
-  const fetchDetails = useCallback(async (runId: string) => {
-    try {
-      const details = await api.getRunDetails(runId);
-      setRunDetails(details.data);
-      
-      // We no longer clear activeRunId on terminal states.
-      // Polling naturally stops because shouldPoll will become false.
-    } catch (err: any) {
-      console.error(`Failed to fetch run details for ${runId}:`, err);
-    }
-  }, []);
+export interface TriggerWorkflowRequest {
+  scenario_name: string;
+  objective?: string | null;
+  execution_mode?: string;
+}
 
-  // Determine if we should poll
-  const shouldPoll = activeRunId && runDetails?.db_record.status === "running";
+export interface ApproveWorkflowRequest {
+  approval_token: string;
+}
 
-  // Poll details when activeRunId changes and is running
-  useEffect(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-
-    if (!activeRunId) {
-      return;
-    }
-
-    // Always fetch once when activeRunId changes
-    fetchDetails(activeRunId);
-    fetchGlobalState();
-
-    if (!shouldPoll) {
-      return;
-    }
-
-    // Setup 2-second short polling interval ONLY when running
-    pollingRef.current = setInterval(() => {
-      fetchDetails(activeRunId);
-      fetchGlobalState();
-    }, 2000);
-
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
+export function useWorkflows() {
+  return useQuery<WorkflowCard[]>({
+    queryKey: ["workflows"],
+    queryFn: async () => {
+      const res = await api.get<WorkflowCard[]>("/api/v1/workflows");
+      if (!res) return [];
+      if (!Array.isArray(res)) {
+        console.error("Unexpected API response for workflows list", res);
+        return [];
       }
-    };
-  }, [activeRunId, shouldPoll, fetchDetails, fetchGlobalState]);
+      return res;
+    },
+    refetchInterval: 10000,
+    staleTime: 5000,
+  });
+}
 
-  // Initial load
-  useEffect(() => {
-    setIsLoading(true);
-    fetchGlobalState()
-      .catch((err) => setError(err.message))
-      .finally(() => setIsLoading(false));
-  }, [fetchGlobalState]);
-
-  const triggerRun = useCallback(async (scenarioName: string, dryRun: boolean) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await api.triggerRun(scenarioName, dryRun);
-      const newRunId = res.data.run_id;
-      setActiveRunId(newRunId);
-      await fetchGlobalState();
-      return newRunId;
-    } catch (err: any) {
-      const errMsg = err.response?.data?.message || err.message || "Failed to trigger autopilot reasoning run.";
-      setError(errMsg);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [fetchGlobalState]);
-
-  const approve = useCallback(async (approvalId: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await api.approveRecommendation(approvalId);
-      await fetchGlobalState();
-      // If the currently active run is waiting on this approval, poll for state updates immediately
-      if (activeRunId) {
-        await fetchDetails(activeRunId);
-      } else {
-        // Find which run this approval belongs to and start polling it to see execution outcome
-        const app = approvals.find((a) => a.id === approvalId);
-        const reco = recommendations.find((r) => r.id === app?.recommendation_id);
-        if (reco) {
-          setActiveRunId(reco.run_id);
-        }
+export function useWorkflowDetails(workflowId: string | null) {
+  return useQuery<WorkflowDetails>({
+    queryKey: ["workflowDetails", workflowId],
+    queryFn: () => api.get<WorkflowDetails>(`/api/v1/workflows/${workflowId}`),
+    enabled: !!workflowId,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (data && (data.status === "running" || data.status === "pending" || data.status === "blocked_on_approval")) {
+        return 2000;
       }
-      return res.data;
-    } catch (err: any) {
-      const errMsg = err.response?.data?.message || err.message || "Failed to grant manual approval.";
-      setError(errMsg);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [activeRunId, approvals, recommendations, fetchDetails, fetchGlobalState]);
+      return false;
+    },
+    staleTime: 5000,
+  });
+}
 
-  const selectRun = useCallback((runId: string) => {
-    // If selecting a completed or running run, load its details
-    fetchDetails(runId);
-    // If the run is running or blocked, we want to poll it
-    const matchingRun = runs.find((r) => r.id === runId);
-    if (matchingRun && (matchingRun.status === "running" || matchingRun.status === "blocked_on_approval")) {
-      setActiveRunId(runId);
-    } else {
-      setActiveRunId(null);
-    }
-  }, [runs, fetchDetails]);
+export function useLiveWorkflowState(workflowId: string | null) {
+  return useQuery<LiveWorkflowState>({
+    queryKey: ["liveWorkflowState", workflowId],
+    queryFn: () => api.get<LiveWorkflowState>(`/api/v1/workflows/${workflowId}/state`),
+    enabled: !!workflowId,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (data && (data.status === "running" || data.status === "pending" || data.status === "blocked_on_approval")) {
+        return 2000;
+      }
+      return false;
+    },
+    staleTime: 5000,
+  });
+}
 
-  return {
-    runs,
-    runsDetails,
-    resources,
-    recommendations,
-    approvals,
-    activeRunId,
-    runDetails,
-    isLoading,
-    error,
-    triggerRun,
-    approve,
-    selectRun,
-    refresh: fetchGlobalState
-  };
+export function useTriggerWorkflow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: TriggerWorkflowRequest) =>
+      api.post<any, TriggerWorkflowRequest>("/api/v1/workflows", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowHistory"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+      queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["resources"] });
+      queryClient.invalidateQueries({ queryKey: ["runsDetails"] });
+    },
+  });
+}
+
+export function useApproveWorkflow(workflowId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ApproveWorkflowRequest) =>
+      api.post<any, ApproveWorkflowRequest>(`/api/v1/workflows/${workflowId}/approve`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowDetails", workflowId] });
+      queryClient.invalidateQueries({ queryKey: ["liveWorkflowState", workflowId] });
+      queryClient.invalidateQueries({ queryKey: ["workflowMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+      queryClient.invalidateQueries({ queryKey: ["runsDetails"] });
+    },
+  });
+}
+
+export function usePauseWorkflow(workflowId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<any>(`/api/v1/workflows/${workflowId}/pause`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      if (workflowId) {
+        queryClient.invalidateQueries({ queryKey: ["workflowDetails", workflowId] });
+        queryClient.invalidateQueries({ queryKey: ["liveWorkflowState", workflowId] });
+      }
+    },
+  });
+}
+
+export function useResumeWorkflow(workflowId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<any>(`/api/v1/workflows/${workflowId}/resume`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      if (workflowId) {
+        queryClient.invalidateQueries({ queryKey: ["workflowDetails", workflowId] });
+        queryClient.invalidateQueries({ queryKey: ["liveWorkflowState", workflowId] });
+      }
+    },
+  });
+}
+
+export function useRerunWorkflow(workflowId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (wfId?: string) =>
+      api.post<any>(`/api/v1/workflows/${wfId || workflowId}/rerun`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowHistory"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+      queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["resources"] });
+      queryClient.invalidateQueries({ queryKey: ["runsDetails"] });
+      if (workflowId) {
+        queryClient.invalidateQueries({ queryKey: ["workflowDetails", workflowId] });
+        queryClient.invalidateQueries({ queryKey: ["liveWorkflowState", workflowId] });
+      }
+    },
+  });
 }

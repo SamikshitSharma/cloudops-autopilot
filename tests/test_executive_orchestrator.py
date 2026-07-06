@@ -166,6 +166,14 @@ async def test_executive_partial_failures():
 @pytest.mark.asyncio
 async def test_executive_successful_execution_plan():
     """Verify that a successful run populates a proper action plan and final execution plan details."""
+    from backend.app.database import SessionLocal
+    from backend.app.models.resource import Resource as DBResource
+    with SessionLocal() as db:
+        db_res = db.query(DBResource).filter(DBResource.id == "vm-over-01").first()
+        if db_res:
+            db_res.tags = {"Environment": "Dev"}
+            db.commit()
+            
     coordinator = WorkflowCoordinator()
     
     run = await coordinator.run_autopilot_reasoning(

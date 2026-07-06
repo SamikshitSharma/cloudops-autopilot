@@ -1,150 +1,152 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist+Sans:wght@300;400;500;600;700;800&family=Geist+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Autopilot design system — deep space navy + electric cyan.
+   All colors are HSL. Semantic tokens only; no hard-coded colors in components. */
+
 @layer base {
   :root {
-    /* --- Light Theme (Aether Warm White) --- */
-    --background: 0 0% 98%;           /* hsl(0, 0%, 98%) - #FAFAFA */
-    --foreground: 220 20% 12%;        /* hsl(220, 20%, 12%) - #1D2026 */
-    
-    --card: 220 8% 95%;               /* hsl(220, 8%, 95%) - #F0F1F4 */
-    --card-foreground: 220 20% 12%;   /* hsl(220, 20%, 12%) */
-    
-    --popover: 220 8% 95%;
-    --popover-foreground: 220 20% 12%;
-    
-    --primary: 226 65% 48%;           /* hsl(226, 65%, 48%) - Slate Blue #2E46A5 */
-    --primary-foreground: 0 0% 98%;
-    
-    --secondary: 220 10% 91%;         /* hsl(220, 10%, 91%) - #E2E4E8 */
-    --secondary-foreground: 220 10% 45%; /* hsl(220, 10%, 45%) - #69717D */
-    
-    --muted: 220 10% 91%;
-    --muted-foreground: 220 10% 45%;
-    
-    --accent: 220 10% 91%;
-    --accent-foreground: 220 20% 12%;
-    
-    --destructive: 348 75% 50%;       /* Quiet crimson */
-    --destructive-foreground: 0 0% 98%;
-    
-    --border: 220 10% 91%;            /* hsl(220, 10%, 91%) */
-    --input: 220 10% 91%;
-    --ring: 226 65% 48%;
-    
-    --radius: 8px;
+    --background: 222 47% 6%;
+    --foreground: 210 40% 96%;
 
-    /* Semantic Alerts */
-    --success: 150 60% 45%;           /* Quiet emerald */
-    --warning: 38 80% 50%;            /* Quiet amber */
-    --danger: 348 75% 50%;            /* Quiet crimson */
+    --card: 222 40% 9%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 222 44% 8%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 189 94% 55%;
+    --primary-foreground: 222 47% 6%;
+    --primary-glow: 189 100% 70%;
+
+    --secondary: 222 32% 14%;
+    --secondary-foreground: 210 40% 96%;
+
+    --muted: 222 30% 12%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 262 83% 62%;
+    --accent-foreground: 210 40% 98%;
+
+    --success: 152 76% 45%;
+    --success-foreground: 222 47% 6%;
+    --warning: 38 96% 58%;
+    --warning-foreground: 222 47% 6%;
+    --destructive: 0 84% 62%;
+    --destructive-foreground: 210 40% 98%;
+    --info: 210 92% 60%;
+    --info-foreground: 210 40% 98%;
+
+    --border: 222 32% 16%;
+    --input: 222 32% 16%;
+    --ring: 189 94% 55%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar */
+    --sidebar-background: 224 45% 5%;
+    --sidebar-foreground: 215 25% 75%;
+    --sidebar-primary: 189 94% 55%;
+    --sidebar-primary-foreground: 222 47% 6%;
+    --sidebar-accent: 222 35% 12%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 222 32% 12%;
+    --sidebar-ring: 189 94% 55%;
+
+    /* Gradients & effects */
+    --gradient-primary: linear-gradient(135deg, hsl(189 94% 55%), hsl(262 83% 62%));
+    --gradient-surface: linear-gradient(180deg, hsl(222 40% 10% / 0.9), hsl(222 44% 7% / 0.7));
+    --gradient-glow: radial-gradient(600px circle at 50% 0%, hsl(189 94% 55% / 0.15), transparent 60%);
+    --gradient-mesh:
+      radial-gradient(at 20% 10%, hsl(189 94% 55% / 0.18) 0, transparent 45%),
+      radial-gradient(at 80% 20%, hsl(262 83% 62% / 0.15) 0, transparent 50%),
+      radial-gradient(at 60% 90%, hsl(210 92% 60% / 0.10) 0, transparent 55%);
+
+    --shadow-elegant: 0 10px 40px -12px hsl(189 94% 45% / 0.35);
+    --shadow-glow: 0 0 60px -10px hsl(189 100% 70% / 0.45);
+    --shadow-card: 0 1px 0 hsl(210 40% 96% / 0.04) inset, 0 20px 40px -20px hsl(222 47% 2% / 0.7);
+
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  .dark {
-    /* --- Dark Theme (Obsidian Graphite) --- */
-    --background: 220 15% 7%;         /* hsl(220, 15%, 7%) - #0F1013 */
-    --foreground: 0 0% 93%;           /* hsl(0, 0%, 93%) - #ECECEC */
-    
-    --card: 220 10% 10%;              /* hsl(220, 10%, 10%) - #14161B */
-    --card-foreground: 0 0% 93%;
-    
-    --popover: 220 10% 10%;
-    --popover-foreground: 0 0% 93%;
-    
-    --primary: 215 60% 52%;           /* hsl(215, 60%, 52%) - Quiet Slate-Blue #3B58B8 */
-    --primary-foreground: 0 0% 98%;
-    
-    --secondary: 220 8% 14%;          /* #1E2026 */
-    --secondary-foreground: 220 6% 55%; /* hsl(220, 6%, 55%) - #858E9B */
-    
-    --muted: 220 8% 14%;
-    --muted-foreground: 220 6% 55%;
-    
-    --accent: 220 8% 14%;
-    --accent-foreground: 0 0% 93%;
-    
-    --destructive: 348 75% 50%;
-    --destructive-foreground: 0 0% 94%;
-    
-    --border: 220 8% 14%;             /* hsl(220, 8%, 14%) */
-    --input: 220 8% 14%;
-    --ring: 215 60% 52%;
+  /* We ship dark by default; light kept for a11y fallback */
+  .light {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 189 90% 40%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 45%;
+    --accent: 262 80% 55%;
+    --accent-foreground: 210 40% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 189 90% 40%;
   }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
+  html { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
-    font-family: 'Geist Sans', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    letter-spacing: -0.015em;
-    overflow-x: hidden;
-    transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
-                color 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
-                border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    background-image: var(--gradient-mesh);
+    background-attachment: fixed;
   }
-  
-  /* Monospace overrides */
-  .font-mono {
-    font-family: 'Geist Mono', 'JetBrains Mono', Consolas, Monaco, monospace;
-    letter-spacing: 0;
+  h1, h2, h3, h4, h5 { font-family: 'Space Grotesk', 'Inter', sans-serif; letter-spacing: -0.02em; }
+  code, kbd, pre { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  ::selection { background: hsl(var(--primary) / 0.35); color: hsl(var(--foreground)); }
+}
+
+@layer components {
+  .glass {
+    background: var(--gradient-surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-card);
+  }
+  .glow-primary { box-shadow: var(--shadow-glow); }
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .kbd {
+    @apply inline-flex h-5 min-w-5 items-center justify-center rounded border border-border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground;
+  }
+  .grid-pattern {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.5) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.5) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .pulse-dot::before {
+    content: '';
+    @apply absolute inline-flex h-full w-full rounded-full opacity-75;
+    background: currentColor;
+    animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
   }
 }
 
-/* Custom Minimalist Scrollbars */
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--border));
-  border-radius: var(--radius);
-}
-::-webkit-scrollbar-thumb:hover {
-  background-color: hsl(var(--muted-foreground) / 0.3);
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .animate-in-up { animation: in-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) both; }
+  .animate-fade { animation: fade 0.4s ease both; }
+  .animate-shimmer { background-size: 200% 100%; animation: shimmer 2s linear infinite; }
 }
 
-/* Depth Elevations */
-.shadow-elevation-1 {
-  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.2);
-}
-
-.shadow-elevation-2 {
-  box-shadow: 0 16px 40px -6px rgba(0, 0, 0, 0.4);
-}
-
-/* Physics transitions */
-.transition-spring-350 {
-  transition: all 350ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.transition-spring-200 {
-  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.fade-in-up {
-  animation: fade-in-up 250ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes status-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-
-.animate-status-pulse {
-  animation: status-pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
+@keyframes in-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }
