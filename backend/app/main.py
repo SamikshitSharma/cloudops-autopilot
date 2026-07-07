@@ -1119,19 +1119,84 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
         return "".join(ch.lower() for ch in value if ch.isalnum())
 
     normalized_query = normalize(query)
+    workflow_intent = "workflow" in q or "workflows" in q or "pipeline" in q or "run" in q
+    recommendation_intent = "recommendation" in q or "recommendations" in q or "reco" in q
+    audit_intent = "audit" in q or "ledger" in q or "trail" in q
+    governance_intent = "approval" in q or "risk" in q or "governance" in q
+
+    # Current-question intents must beat stale topology/resource context sent by the UI.
+    if governance_intent:
+        pending_approvals = [r for r in recommendations if r.status in {"pending", "escalated"} and (r.risk_level == "high" or r.action_type in {"delete", "resize"})]
+        high_risk = [r for r in recommendations if r.risk_level == "high"]
+        active_workflows = [w for w in workflows if w.status in {"running", "pending", "blocked_on_approval"}]
+        latest_workflow = workflows[0] if workflows else None
+        lines = [
+            "Governance and risk evidence from the backend:",
+            f"- Pending approval candidates: {len(pending_approvals)}.",
+            f"- High-risk recommendations recorded: {len(high_risk)}.",
+            f"- Active workflow runs: {len(active_workflows)}.",
+            f"- Total workflow history in AI scope: {len(workflows)} run(s).",
+        ]
+        if pending_approvals:
+            lines.extend(f"- Approval candidate {r.id}: {r.action_type} on {r.resource_id}, status {r.status}, risk {r.risk_level}." for r in pending_approvals[:5])
+        else:
+            lines.append("- No approval-blocked or high-risk pending recommendation is currently recorded.")
+        if latest_workflow:
+            lines.append(f"- Latest workflow: {latest_workflow.id} is {latest_workflow.status}; objective: {latest_workflow.objective or 'not recorded'}.")
+        if audit_logs:
+            latest_audit = audit_logs[0]
+            lines.append(f"- Latest audit event: {latest_audit.timestamp} {latest_audit.event_type} by {latest_audit.agent_name} ({latest_audit.status}).")
+        return "\n".join(lines)
+
+    if workflow_intent:
+        wf_summary = [f"- Run {w.id}: objective '{w.objective}' is {w.status}" for w in workflows]
+        return "Here is a summary of the multi-agent orchestrator workflows:\n" + ("\n".join(wf_summary) if wf_summary else "No workflow runs recorded in history.")
+
+    if recommendation_intent:
+        import re
+        nums = re.findall(r"\d+", q)
+        reco_item = None
+        if nums:
+            idx = int(nums[0])
+            if idx < len(recommendations):
+                reco_item = recommendations[idx]
+            else:
+                reco_item = next((r for r in recommendations if str(idx) in r.id), None)
+        if not reco_item and recommendations:
+            reco_item = recommendations[0]
+        if reco_item:
+            return (
+                f"Recommendation '{reco_item.id}': Proposed action is '{reco_item.action_type.upper()}' on resource '{reco_item.resource_id}'.\n"
+                f"- Recorded Monthly Savings: ${reco_item.saving_amount:.2f}/mo\n"
+                f"- Risk Level: {reco_item.risk_level.upper()}\n"
+                f"- Rationale: {reco_item.rationale}\n"
+                f"- Current Status: {reco_item.status.upper()}"
+            )
+        return "No recommendations found in the database."
+
+    if audit_intent:
+        audit_summary = [f"- {a.timestamp.strftime('%H:%M:%S')} | {a.agent_name} | {a.event_type} ({a.status})" for a in audit_logs[:10]]
+        return "Here is a summary of the latest audit ledger records:\n" + ("\n".join(audit_summary) if audit_summary else "Audit ledger is currently empty.")
+
     explicit_resource = None
-    if selected_resource_id:
-        explicit_resource = next((x for x in resources if x.id == selected_resource_id or x.name == selected_resource_id), None)
-    if not explicit_resource and normalized_query:
+    if normalized_query:
         explicit_resource = next(
             (
                 x for x in resources
                 if normalize(x.id) in normalized_query
                 or normalize(x.name) in normalized_query
+                or normalized_query in normalize(x.id)
+                or normalized_query in normalize(x.name)
                 or (x.provider_id and normalize(x.provider_id) in normalized_query)
             ),
             None,
         )
+    if not explicit_resource and normalized_query in {"vm", "virtualmachine", "virtualmachines"}:
+        explicit_resource = next((x for x in resources if "virtualmachines" in (x.type or "").lower()), None)
+    if not explicit_resource and ("subnet" in q or "subnetdb" in normalized_query):
+        explicit_resource = next((x for x in resources if "virtualnetworks" in (x.type or "").lower()), None)
+    if not explicit_resource and selected_resource_id:
+        explicit_resource = next((x for x in resources if x.id == selected_resource_id or x.name == selected_resource_id), None)
 
     if explicit_resource:
         related_recos = [r for r in recommendations if r.resource_id == explicit_resource.id]
@@ -1370,11 +1435,14 @@ def fallback_rule_based_ai(query: str, resources, recommendations, workflows, au
 async def ask_ai(payload: AskAIRequest, db: Session = Depends(get_db)):
     """Answers operator queries about cloud resources, optimization runs, policy status, and audit ledgers."""
     resources = _resource_query(db).all()
-    recommendations = db.query(DBRecommendation).all()
     from backend.app.models.workflow import SequentialWorkflow
+    from backend.app.models.run import Run as DBRun
     from cloud_adapter import get_azure_client
     cloud_mode = get_azure_client().get_mode()
     workflows = db.query(SequentialWorkflow).filter(SequentialWorkflow.execution_mode == cloud_mode).order_by(SequentialWorkflow.created_at.desc()).all()
+    recommendations = db.query(DBRecommendation).join(DBRun, DBRecommendation.run_id == DBRun.id).join(
+        SequentialWorkflow, SequentialWorkflow.run_id == DBRun.id
+    ).filter(SequentialWorkflow.execution_mode == cloud_mode).all()
     audit_logs = db.query(DBAuditLog).order_by(DBAuditLog.timestamp.desc()).all()
     
     # Use google-genai Gemini if API key is present
